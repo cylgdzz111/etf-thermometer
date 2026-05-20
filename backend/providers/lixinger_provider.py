@@ -24,23 +24,51 @@ LIXINGER_API = 'https://open.lixinger.com/api/cn/index/fundamental'
 BATCH_SIZE = 100  # 不传日期时最大批量大小
 
 METRICS_LIST = [
-    # 估值指标（市值加权），格式：[name].[metricsType]
-    'pe_ttm.mcw',            # PE TTM 市值加权
-    'pb.mcw',                # PB 市值加权
-    'ps_ttm.mcw',            # PS TTM 市值加权
-    'dyr.mcw',               # 股息率 市值加权
-    # 估值分位数，格式：[name].[granularity].[metricsType].[statisticsDataType]
-    'pe_ttm.y10.mcw.cvpos',  # PE TTM 10年分位
-    'pe_ttm.y5.mcw.cvpos',   # PE TTM 5年分位
-    'pb.y10.mcw.cvpos',      # PB 10年分位
-    'pb.y5.mcw.cvpos',       # PB 5年分位
-    # 行情指标，格式：[name]
-    'cp',                    # 收盘点位
-    'mc',                    # 总市值
-    'cmc',                   # 流通市值
-    'ecmc',                  # 自由流通市值
-    'tv',                    # 成交量
-    'ta',                    # 成交金额
+    # ── 当前值：4 指标 × 5 metricsType ──────────────────────────────────
+    # 主流平台（东方财富/集思录/Wind）以 mcw（市值加权）为主；
+    # ew（等权）适合中小盘指数（中证500/1000），部分平台同时展示
+    'pe_ttm.mcw', 'pe_ttm.ew', 'pe_ttm.ewpvo', 'pe_ttm.avg', 'pe_ttm.median',
+    'pb.mcw',     'pb.ew',     'pb.ewpvo',     'pb.avg',     'pb.median',
+    'ps_ttm.mcw', 'ps_ttm.ew', 'ps_ttm.ewpvo', 'ps_ttm.avg', 'ps_ttm.median',
+    'dyr.mcw',    'dyr.ew',    'dyr.ewpvo',    'dyr.avg',    'dyr.median',
+
+    # ── pe_ttm 历史区间统计 ──────────────────────────────────────────────
+    # 主流平台温度计核心字段：y10.mcw.cvpos（10年市值加权分位数）
+    'pe_ttm.y10.mcw.cvpos', 'pe_ttm.y10.mcw.cv', 'pe_ttm.y10.mcw.minv', 'pe_ttm.y10.mcw.maxv', 'pe_ttm.y10.mcw.avgv',
+    'pe_ttm.y5.mcw.cvpos',  'pe_ttm.y5.mcw.cv',  'pe_ttm.y5.mcw.minv',  'pe_ttm.y5.mcw.maxv',  'pe_ttm.y5.mcw.avgv',
+    'pe_ttm.y3.mcw.cvpos',  'pe_ttm.y3.mcw.cv',  'pe_ttm.y3.mcw.minv',  'pe_ttm.y3.mcw.maxv',
+    'pe_ttm.y1.mcw.cvpos',  'pe_ttm.y1.mcw.cv',
+    'pe_ttm.y10.ew.cvpos',  'pe_ttm.y10.ew.cv',  'pe_ttm.y10.ew.minv',  'pe_ttm.y10.ew.maxv',
+    'pe_ttm.y5.ew.cvpos',   'pe_ttm.y5.ew.cv',
+    'pe_ttm.y3.ew.cvpos',
+
+    # ── pb 历史区间统计 ──────────────────────────────────────────────────
+    'pb.y10.mcw.cvpos', 'pb.y10.mcw.cv', 'pb.y10.mcw.minv', 'pb.y10.mcw.maxv', 'pb.y10.mcw.avgv',
+    'pb.y5.mcw.cvpos',  'pb.y5.mcw.cv',  'pb.y5.mcw.minv',  'pb.y5.mcw.maxv',
+    'pb.y3.mcw.cvpos',  'pb.y3.mcw.cv',
+    'pb.y1.mcw.cvpos',
+    'pb.y10.ew.cvpos',  'pb.y10.ew.cv',
+    'pb.y5.ew.cvpos',
+
+    # ── ps_ttm 历史区间统计 ──────────────────────────────────────────────
+    'ps_ttm.y10.mcw.cvpos', 'ps_ttm.y10.mcw.cv', 'ps_ttm.y10.mcw.minv', 'ps_ttm.y10.mcw.maxv',
+    'ps_ttm.y5.mcw.cvpos',  'ps_ttm.y5.mcw.cv',
+    'ps_ttm.y10.ew.cvpos',
+
+    # ── dyr 历史区间统计 ─────────────────────────────────────────────────
+    'dyr.y10.mcw.cvpos', 'dyr.y10.mcw.cv', 'dyr.y10.mcw.minv', 'dyr.y10.mcw.maxv',
+    'dyr.y5.mcw.cvpos',  'dyr.y5.mcw.cv',
+    'dyr.y10.ew.cvpos',
+
+    # ── 行情指标 ─────────────────────────────────────────────────────────
+    'cp',    # 收盘点位
+    'cpc',   # 涨跌幅
+    'r_cp',  # 全收益收盘点位
+    'mc',    # 总市值
+    'cmc',   # 流通市值
+    'ecmc',  # 自由流通市值
+    'tv',    # 成交量
+    'ta',    # 成交金额
 ]
 
 
