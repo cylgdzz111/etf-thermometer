@@ -14,32 +14,11 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      - DB_HOST=db
-      - DB_PORT=3306
-      - DB_USER=etf
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=etf_thermometer
+      - DB_NAME=${DB_NAME:-etf_thermometer}
       - DB_ECHO=false
-    depends_on:
-      db:
-        condition: service_healthy
+      - LIXINGER_TOKEN=${LIXINGER_TOKEN:-}
     restart: unless-stopped
-
-  db:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-      MYSQL_DATABASE: etf_thermometer
-      MYSQL_USER: etf
-      MYSQL_PASSWORD: ${DB_PASSWORD}
-    volumes:
-      - db_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-volumes:
-  db_data:
