@@ -32,7 +32,6 @@ interface MetricConfig {
   series:     (h: IndexHistory) => (number | null)[];
   rangeStats: (h: IndexHistory) => RangeStats;
   current:    (d: IndexDetail)  => number | null;
-  // 10年分位（列表温度用，展示在 banner）
   pct10y:     (d: IndexDetail)  => number | null;
   min:        (d: IndexDetail)  => number | null;
   max:        (d: IndexDetail)  => number | null;
@@ -42,6 +41,8 @@ interface MetricConfig {
   distMax:    (d: IndexDetail)  => number | null;
   fmt: (v: number) => string;
   bucketIdx:  (d: IndexDetail)  => number | undefined;
+  // 图表 y 轴缩放倍数（原始值 × yScale 后传给 LineChart）
+  yScale?: number;
 }
 
 function _bucketIdx(val: number | null, mn: number | null, mx: number | null, bins: number): number | undefined {
@@ -89,6 +90,7 @@ const METRIC_CONFIG: Record<Metric, MetricConfig> = {
     dist: d => d.dyr_dist, distMin: d => d.dyr_dist_min, distMax: d => d.dyr_dist_max,
     fmt: v => (v * 100).toFixed(2) + '%',
     bucketIdx: d => _bucketIdx(d.dyr, d.dyr_dist_min, d.dyr_dist_max, d.dyr_dist.length),
+    yScale: 100,
   },
 };
 
@@ -131,10 +133,18 @@ export default function Detail() {
 
   // 分位线 & 区间分位：来自 history（随区间切换实时变化）
   const rangeStats: RangeStats = history ? cfg.rangeStats(history) : { p30: null, p50: null, p80: null, pct: null };
-  const refLines = buildRefLines(rangeStats);
 
   const metricLabel = METRIC_OPTIONS.find(m => m.id === metric)!.label;
-  const metricSeries = history ? { [metricLabel]: cfg.series(history) } : null;
+  const yScale = cfg.yScale ?? 1;
+  const scaledSeries = (s: (number | null)[]) => yScale === 1 ? s : s.map(v => v == null ? null : v * yScale);
+  const scaledStats  = (st: RangeStats): RangeStats => yScale === 1 ? st : {
+    p30: st.p30 == null ? null : st.p30 * yScale,
+    p50: st.p50 == null ? null : st.p50 * yScale,
+    p80: st.p80 == null ? null : st.p80 * yScale,
+    pct: st.pct,
+  };
+  const refLines = buildRefLines(scaledStats(rangeStats));
+  const metricSeries = history ? { [metricLabel]: scaledSeries(cfg.series(history)) } : null;
   const priceSeries  = history?.price.some(v => v != null) ? { '收盘价': history!.price } : null;
 
   const cur  = cfg.current(detail);

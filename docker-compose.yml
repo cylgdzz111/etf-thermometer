@@ -1,8 +1,8 @@
 services:
   nginx:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
     ports:
       - "80:80"
     depends_on:
@@ -39,23 +39,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
-
-  scheduler:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    # APScheduler 长驻进程，每日 20:00 自动执行
-    command: python -m scripts.fetch_daily
-    environment:
-      - DB_HOST=db
-      - DB_PORT=3306
-      - DB_USER=etf
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=etf_thermometer
-    depends_on:
-      db:
-        condition: service_healthy
     restart: unless-stopped
 
 volumes:

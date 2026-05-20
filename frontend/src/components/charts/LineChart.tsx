@@ -15,7 +15,7 @@ interface Props {
   padding?: { l: number; r: number; t: number; b: number };
 }
 
-const DEFAULT_PADDING = { l: 36, r: 16, t: 16, b: 28 };
+const DEFAULT_PADDING = { l: 44, r: 16, t: 16, b: 28 };
 
 function buildPath(
   values: (number | null)[],
@@ -75,6 +75,9 @@ export default function LineChart({
 
   const yTicks = 4;
   const ticks = Array.from({ length: yTicks + 1 }, (_, i) => ymin + (i / yTicks) * (ymax - ymin));
+  const tickStep = (ymax - ymin) / yTicks;
+  const yDecimals = tickStep >= 10 ? 0 : tickStep >= 1 ? 1 : tickStep >= 0.1 ? 2 : 3;
+  const fmtTick = (v: number) => v.toFixed(yDecimals);
 
   const yearTicks = dates
     ? computeYearTicks(dates)
@@ -88,7 +91,7 @@ export default function LineChart({
       {ticks.map((t, i) => (
         <g key={i}>
           <line x1={padding.l} x2={width - padding.r} y1={y(t)} y2={y(t)} stroke="var(--divider)" strokeWidth="1" />
-          <text x={padding.l - 8} y={y(t) + 3} textAnchor="end" fontSize="10" fill="var(--ink-3)" fontFamily="var(--font-mono)">{Math.round(t)}</text>
+          <text x={padding.l - 8} y={y(t) + 3} textAnchor="end" fontSize="10" fill="var(--ink-3)" fontFamily="var(--font-mono)">{fmtTick(t)}</text>
         </g>
       ))}
       {yearTicks.map(({ yr, idx }) => (
