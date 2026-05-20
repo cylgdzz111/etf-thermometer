@@ -24,22 +24,23 @@ LIXINGER_API = 'https://open.lixinger.com/api/cn/index/fundamental'
 BATCH_SIZE = 100  # 不传日期时最大批量大小
 
 METRICS_LIST = [
-    'pe_ttm',                # 滚动市盈率
-    'pe_lyr',                # 静态市盈率（年报）
-    'pb_mrq',                # 市净率
-    'ps_ttm',                # 市销率
-    'pcf_ttm',               # 市现率
-    'dyr_ttm',               # 股息率
+    # 估值指标（市值加权），格式：[name].[metricsType]
+    'pe_ttm.mcw',            # PE TTM 市值加权
+    'pb.mcw',                # PB 市值加权
+    'ps_ttm.mcw',            # PS TTM 市值加权
+    'dyr.mcw',               # 股息率 市值加权
+    # 估值分位数，格式：[name].[granularity].[metricsType].[statisticsDataType]
+    'pe_ttm.y10.mcw.cvpos',  # PE TTM 10年分位
+    'pe_ttm.y5.mcw.cvpos',   # PE TTM 5年分位
+    'pb.y10.mcw.cvpos',      # PB 10年分位
+    'pb.y5.mcw.cvpos',       # PB 5年分位
+    # 行情指标，格式：[name]
+    'cp',                    # 收盘点位
     'mc',                    # 总市值
-    'fmc',                   # 流通市值
-    'roe_ttm',               # 净资产收益率
-    'roa_ttm',               # 总资产收益率
-    'grossProfitMargin_ttm', # 毛利率
-    'netProfitMargin_ttm',   # 净利率
-    'debtToAssets',          # 资产负债率
-    'currentRatio',          # 流动比率
-    'eps_ttm',               # 每股收益
-    'bvps',                  # 每股净资产
+    'cmc',                   # 流通市值
+    'ecmc',                  # 自由流通市值
+    'tv',                    # 成交量
+    'ta',                    # 成交金额
 ]
 
 
@@ -71,12 +72,13 @@ def _parse_records(raw: list[dict[str, Any]]) -> list[DailyMetrics]:
         except ValueError:
             continue
 
-        pe_val = r.get('pe_ttm')
-        pb_val = r.get('pb_mrq')
+        pe_val = r.get('pe_ttm.mcw')
+        pb_val = r.get('pb.mcw')
+        cp_val = r.get('cp')
         results.append(DailyMetrics(
             index_code=code,
             date=d,
-            close=None,  # 理杏仁不提供价格，由 akshare 负责
+            close=float(cp_val) if cp_val is not None else None,
             pe=float(pe_val) if pe_val is not None else None,
             pb=float(pb_val) if pb_val is not None else None,
             source='lixinger',
@@ -112,7 +114,7 @@ class LixingerProvider(DataProvider):
             payload['endDate'] = end_date.strftime('%Y-%m-%d')
 
         result = _post_with_retry(payload)
-        if result.get('code') != 200:
+        if result.get('code') != 1:
             raise DataFetchError(f'理杏仁 API 错误 {code}: {result.get("message")}')
         return result.get('data', [])
 
@@ -135,7 +137,7 @@ class LixingerProvider(DataProvider):
                 'metricsList': METRICS_LIST,
             }
             result = _post_with_retry(payload)
-            if result.get('code') != 200:
+            if result.get('code') != 1:
                 logger.warning('理杏仁批量请求失败: %s', result.get('message'))
                 continue
             all_data.extend(result.get('data', []))
