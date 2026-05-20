@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     DB_ECHO: bool = False
 
     TUSHARE_TOKEN: str = ''
+    LIXINGER_TOKEN: str = ''
 
     @property
     def db_url_async(self) -> str:

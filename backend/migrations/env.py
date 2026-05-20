@@ -7,9 +7,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from app.core.config import settings
 from app.core.database import Base
-import app.models.index          # noqa: F401
-import app.models.daily_metrics  # noqa: F401
-import app.models.index_stats    # noqa: F401
+import app.models.index                  # noqa: F401
+import app.models.daily_metrics          # noqa: F401
+import app.models.index_stats            # noqa: F401
+import app.models.lixinger_fundamental   # noqa: F401
 
 config = context.config
 
