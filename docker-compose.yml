@@ -21,4 +21,6 @@ services:
       - DB_NAME=${DB_NAME:-etf_thermometer}
       - DB_ECHO=false
       - LIXINGER_TOKEN=${LIXINGER_TOKEN:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
