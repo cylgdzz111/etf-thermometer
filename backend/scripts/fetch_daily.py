@@ -34,8 +34,10 @@ provider = CompositeProvider()
 BACKFILL_YEARS = 11
 
 
-async def fetch_index(code: str, market: str, start_date: date):
-    """抓取单个指数从 start_date 至今的数据，跳过已有记录"""
+async def fetch_index(code: str, market: str, start_date: date, update_pe: bool = False):
+    """抓取单个指数从 start_date 至今的数据。
+    update_pe=True 时只补充已有记录中 pe/pb 为 NULL 的字段，不插入新行。
+    """
     try:
         records = provider.get_history(code, market, start_date)
     except Exception as e:
@@ -46,28 +48,32 @@ async def fetch_index(code: str, market: str, start_date: date):
         return 0
 
     async with AsyncSessionLocal() as session:
-        inserted = 0
+        affected = 0
         for r in records:
-            # 已存在则跳过（uq_code_date 约束保证唯一性）
-            exists = (await session.execute(
-                select(DailyMetricsModel.id)
+            existing = (await session.execute(
+                select(DailyMetricsModel)
                 .where(DailyMetricsModel.index_code == r.index_code,
                        DailyMetricsModel.date == r.date)
                 .limit(1)
             )).scalar_one_or_none()
-            if exists:
-                continue
-            session.add(DailyMetricsModel(
-                index_code=r.index_code,
-                date=r.date,
-                close=r.close,
-                pe=r.pe,
-                pb=r.pb,
-                source=r.source,
-            ))
-            inserted += 1
+
+            if existing:
+                if update_pe and r.pe is not None and existing.pe is None:
+                    existing.pe = r.pe
+                    existing.pb = r.pb
+                    affected += 1
+            else:
+                session.add(DailyMetricsModel(
+                    index_code=r.index_code,
+                    date=r.date,
+                    close=r.close,
+                    pe=r.pe,
+                    pb=r.pb,
+                    source=r.source,
+                ))
+                affected += 1
         await session.commit()
-    return inserted
+    return affected
 
 
 async def get_latest_date(code: str) -> date | None:
@@ -128,10 +134,29 @@ async def run_backfill():
     await calc_all()
 
 
+async def run_fix_pe():
+    """对已有价格数据但 PE/PB 为 NULL 的指数补充 PE/PB"""
+    logger.info('=== 开始 PE/PB 补充 ===')
+    start_date = date(date.today().year - BACKFILL_YEARS, 1, 1)
+
+    async with AsyncSessionLocal() as session:
+        indices = (await session.execute(select(Index))).scalars().all()
+
+    for idx in indices:
+        logger.info('修复 PE/PB: %s %s', idx.code, idx.name)
+        n = await fetch_index(idx.code, idx.market, start_date, update_pe=True)
+        logger.info('%s: 更新 %d 条', idx.code, n)
+
+    logger.info('=== PE/PB 补充完成，重算分位数 ===')
+    await calc_all()
+
+
 async def main_async(mode: str):
     try:
         if mode == 'backfill':
             await run_backfill()
+        elif mode == 'fix_pe':
+            await run_fix_pe()
         else:
             await run_daily()
     finally:
@@ -142,10 +167,15 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--now', action='store_true', help='立即执行一次后退出')
     parser.add_argument('--backfill', action='store_true', help='历史回填后退出')
+    parser.add_argument('--fix-pe', action='store_true', help='补充 PE/PB 为 NULL 的历史记录')
     args = parser.parse_args()
 
     if args.backfill:
         asyncio.run(main_async('backfill'))
+        return
+
+    if args.fix_pe:
+        asyncio.run(main_async('fix_pe'))
         return
 
     if args.now:
