@@ -119,15 +119,19 @@ class LixingerProvider(DataProvider):
     # ------------------------------------------------------------------
     # 批量最新抓取：不传日期，最多 100 个 stockCode
     # ------------------------------------------------------------------
-    def _fetch_latest_batch(self, codes: list[str]) -> list[dict[str, Any]]:
-        """一次最多 BATCH_SIZE 个 code，返回最新一条数据"""
+    def _fetch_latest_batch(self, codes: list[str], fetch_date: date | None = None) -> list[dict[str, Any]]:
+        """批量获取单天数据，最多 BATCH_SIZE 个 code。
+        fetch_date 默认取今日；传 date 字段（非 startDate/endDate）。
+        """
         self._require_token()
+        d_str = (fetch_date or date.today()).strftime('%Y-%m-%d')
         all_data: list[dict[str, Any]] = []
         for i in range(0, len(codes), BATCH_SIZE):
             chunk = codes[i: i + BATCH_SIZE]
             payload: dict[str, Any] = {
                 'token': self._token,
                 'stockCodes': chunk,
+                'date': d_str,
                 'metricsList': METRICS_LIST,
             }
             result = _post_with_retry(payload)
