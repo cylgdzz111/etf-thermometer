@@ -1,5 +1,8 @@
 from datetime import datetime
+from typing import Generic, TypeVar
 from pydantic import BaseModel
+
+T = TypeVar('T')
 
 
 class IndexRowSchema(BaseModel):
@@ -77,6 +80,6 @@ class IndexHistorySchema(BaseModel):
     dyr_stats: RangeStats = RangeStats()
 
 
-class ApiResponse[T](BaseModel):
+class ApiResponse(BaseModel, Generic[T]):
     data: T
     updated_at: datetime | None = None
