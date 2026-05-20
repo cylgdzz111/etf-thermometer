@@ -126,6 +126,8 @@ class AkshareProvider(DataProvider):
                 close=float(row['close']),
                 pe=pe,
                 pb=pb,
+                ps=None,
+                dyr=None,
                 source=self.SOURCE,
             ))
         return results

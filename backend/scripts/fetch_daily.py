@@ -72,6 +72,8 @@ async def fetch_index(code: str, market: str, start_date: date, update_pe: bool 
                     close=r.close,
                     pe=r.pe,
                     pb=r.pb,
+                    ps=r.ps,
+                    dyr=r.dyr,
                     source=r.source,
                 ))
                 affected += 1
@@ -156,12 +158,13 @@ async def run_fix_pe():
 
 
 async def _apply_lixinger_records(records: list) -> int:
-    """将一批理杏仁 DailyMetrics 写入 daily_metrics（只更新 PE 为 NULL 的行）"""
+    """将一批理杏仁 DailyMetrics 写入 daily_metrics。
+    - pe/pb：只填充原为 NULL 的行（保留 akshare 已有数据）
+    - ps/dyr：lixinger 独有，有值则直接覆写
+    """
     async with AsyncSessionLocal() as session:
         updated = 0
         for r in records:
-            if r.pe is None:
-                continue
             existing = (await session.execute(
                 select(DailyMetricsModel)
                 .where(DailyMetricsModel.index_code == r.index_code,
@@ -169,10 +172,23 @@ async def _apply_lixinger_records(records: list) -> int:
                 .limit(1)
             )).scalar_one_or_none()
 
-            if existing and existing.pe is None:
+            if not existing:
+                continue
+
+            changed = False
+            if r.pe is not None and existing.pe is None:
                 existing.pe = r.pe
                 existing.pb = r.pb
+                changed = True
+            if r.ps is not None:
+                existing.ps = r.ps
+                changed = True
+            if r.dyr is not None:
+                existing.dyr = r.dyr
+                changed = True
+            if changed:
                 updated += 1
+
         await session.commit()
     return updated
 
@@ -222,6 +238,93 @@ async def run_lixinger_enrich(is_backfill: bool = False):
     logger.info('=== 理杏仁 PE/PB 增强完成 ===')
 
 
+async def _backfill_one_from_cache(code: str) -> tuple[int, int]:
+    """从 lixinger_fundamentals 将单个指数的 pe/pb/ps/dyr 回填到 daily_metrics"""
+    from app.models.lixinger_fundamental import LixingerFundamental
+
+    async with AsyncSessionLocal() as session:
+        lf_rows = (await session.execute(
+            select(LixingerFundamental)
+            .where(LixingerFundamental.index_code == code)
+            .order_by(LixingerFundamental.date)
+        )).scalars().all()
+
+        if not lf_rows:
+            return 0, 0
+
+        dm_rows = (await session.execute(
+            select(DailyMetricsModel).where(DailyMetricsModel.index_code == code)
+        )).scalars().all()
+        dm_map = {r.date: r for r in dm_rows}
+
+        updated = inserted = 0
+
+        for lf in lf_rows:
+            d = lf.data
+            pe_val  = d.get('pe_ttm.mcw')
+            pb_val  = d.get('pb.mcw')
+            ps_val  = d.get('ps_ttm.mcw')
+            dyr_val = d.get('dyr.mcw')
+            cp_val  = d.get('cp')
+
+            existing = dm_map.get(lf.date)
+            if existing:
+                changed = False
+                if pe_val is not None and existing.pe is None:
+                    existing.pe = float(pe_val)
+                    changed = True
+                if pb_val is not None and existing.pb is None:
+                    existing.pb = float(pb_val)
+                    changed = True
+                if ps_val is not None and existing.ps is None:
+                    existing.ps = float(ps_val)
+                    changed = True
+                if dyr_val is not None and existing.dyr is None:
+                    existing.dyr = float(dyr_val)
+                    changed = True
+                if changed:
+                    updated += 1
+            elif cp_val is not None:
+                # akshare 无法抓取的指数，用 lixinger 数据建行
+                session.add(DailyMetricsModel(
+                    index_code=code,
+                    date=lf.date,
+                    close=float(cp_val),
+                    pe=float(pe_val)   if pe_val  is not None else None,
+                    pb=float(pb_val)   if pb_val  is not None else None,
+                    ps=float(ps_val)   if ps_val  is not None else None,
+                    dyr=float(dyr_val) if dyr_val is not None else None,
+                    source='lixinger',
+                ))
+                inserted += 1
+
+        await session.commit()
+    return updated, inserted
+
+
+async def run_backfill_from_lixinger_cache():
+    """从 lixinger_fundamentals 缓存表回填 daily_metrics 的 pe/pb/ps/dyr"""
+    from app.models.lixinger_fundamental import LixingerFundamental
+
+    logger.info('=== 从 lixinger_fundamentals 缓存回填 daily_metrics ===')
+
+    async with AsyncSessionLocal() as session:
+        codes = [r[0] for r in (await session.execute(
+            select(LixingerFundamental.index_code).distinct()
+        )).all()]
+
+    logger.info('共 %d 个指数有缓存数据', len(codes))
+    total_updated = total_inserted = 0
+
+    for code in codes:
+        u, i = await _backfill_one_from_cache(code)
+        total_updated += u
+        total_inserted += i
+        logger.info('%s: 更新 %d 条，新增 %d 条', code, u, i)
+
+    logger.info('=== 回填完成：共更新 %d 条，新增 %d 条 ===', total_updated, total_inserted)
+
+
 async def main_async(mode: str):
     try:
         if mode == 'backfill':
@@ -230,6 +333,8 @@ async def main_async(mode: str):
             await run_fix_pe()
         elif mode == 'lixinger_enrich':
             await run_lixinger_enrich()
+        elif mode == 'backfill_cache':
+            await run_backfill_from_lixinger_cache()
         else:
             await run_daily()
     finally:

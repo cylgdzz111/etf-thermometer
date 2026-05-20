@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { Market, IndexRow, IndexDetail } from '../types';
+import type { Market, IndexRow, IndexDetail, IndexHistory } from '../types';
 import client from './client';
 
 interface IndexListParams {
@@ -27,14 +27,12 @@ export function useIndexDetail(code: string) {
   });
 }
 
-export function useIndexHistory(code: string, range: '1y' | '5y' | 'all') {
+export function useIndexHistory(code: string, range: '1y' | '3y' | '5y' | '10y' | 'all') {
   return useQuery({
     queryKey: ['index-history', code, range],
     queryFn: () =>
       client
-        .get<{ data: { price: number[]; pe: number[] } }>(`/indices/${code}/history`, {
-          params: { range },
-        })
+        .get<{ data: IndexHistory }>(`/indices/${code}/history`, { params: { range } })
         .then(r => r.data.data),
     staleTime: 10 * 60 * 1000,
     enabled: !!code,

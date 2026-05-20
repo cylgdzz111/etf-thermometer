@@ -16,5 +16,7 @@ class DailyMetrics(Base):
     close:      Mapped[float | None] = mapped_column(Numeric(12, 4))
     pe:         Mapped[float | None] = mapped_column(Numeric(10, 4))
     pb:         Mapped[float | None] = mapped_column(Numeric(10, 4))
+    ps:         Mapped[float | None] = mapped_column(Numeric(10, 4))
+    dyr:        Mapped[float | None] = mapped_column(Numeric(10, 6))
     source:     Mapped[str] = mapped_column(String(30), nullable=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())

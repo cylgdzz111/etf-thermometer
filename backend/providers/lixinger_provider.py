@@ -100,15 +100,19 @@ def _parse_records(raw: list[dict[str, Any]]) -> list[DailyMetrics]:
         except ValueError:
             continue
 
-        pe_val = r.get('pe_ttm.mcw')
-        pb_val = r.get('pb.mcw')
-        cp_val = r.get('cp')
+        pe_val  = r.get('pe_ttm.mcw')
+        pb_val  = r.get('pb.mcw')
+        ps_val  = r.get('ps_ttm.mcw')
+        dyr_val = r.get('dyr.mcw')
+        cp_val  = r.get('cp')
         results.append(DailyMetrics(
             index_code=code,
             date=d,
-            close=float(cp_val) if cp_val is not None else None,
-            pe=float(pe_val) if pe_val is not None else None,
-            pb=float(pb_val) if pb_val is not None else None,
+            close=float(cp_val)  if cp_val  is not None else None,
+            pe=float(pe_val)     if pe_val  is not None else None,
+            pb=float(pb_val)     if pb_val  is not None else None,
+            ps=float(ps_val)     if ps_val  is not None else None,
+            dyr=float(dyr_val)   if dyr_val is not None else None,
             source='lixinger',
         ))
     return results

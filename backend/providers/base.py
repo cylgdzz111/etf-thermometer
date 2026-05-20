@@ -10,6 +10,8 @@ class DailyMetrics:
     close: float | None
     pe: float | None
     pb: float | None
+    ps: float | None
+    dyr: float | None
     source: str
 
 

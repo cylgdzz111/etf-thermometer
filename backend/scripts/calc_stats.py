@@ -1,5 +1,7 @@
 """
-计算所有指数的 PE/PB 历史分位数，更新 index_stats 表
+计算所有指数的 PE/PB/PS/DYR 历史分位数（10年），更新 index_stats 表。
+分位线（p30/p50/p80）改为在 history 接口按请求区间动态计算，此处不再存储。
+
 用法：python -m scripts.calc_stats
 """
 import asyncio
@@ -9,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from datetime import datetime, date, timedelta
 import numpy as np
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 from app.core.database import AsyncSessionLocal, engine
 from app.models.index import Index
@@ -19,30 +21,37 @@ from app.models.index_stats import IndexStats
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
-# 分位数计算所需最少数据天数（少于此视为数据不足，不写入分位数）
-MIN_PE_DAYS = 250
+MIN_DAYS = 250
 
 
 def _percentile_rank(series: np.ndarray, current: float) -> float:
-    """当前值在历史序列中的百分位排名（0-100）"""
     return float(np.sum(series <= current) / len(series) * 100)
+
+
+def _calc_metric(values: np.ndarray, current: float | None):
+    """返回 (percentile, min, max, avg) 或全 None。"""
+    if len(values) < MIN_DAYS or current is None:
+        return None, None, None, None
+    return (
+        round(_percentile_rank(values, current), 2),
+        float(values.min()),
+        float(values.max()),
+        float(values.mean()),
+    )
 
 
 async def calc_all():
     async with AsyncSessionLocal() as session:
-        # 获取所有指数
         indices = (await session.execute(select(Index))).scalars().all()
         logger.info('共 %d 个指数需要计算', len(indices))
-
         for idx in indices:
             await _calc_one(session, idx.code)
-
         await session.commit()
-        logger.info('全部完成')
+    logger.info('全部完成')
 
 
 async def _calc_one(session, code: str):
-    cutoff = date.today() - timedelta(days=365 * 10)   # 取近 10 年
+    cutoff = date.today() - timedelta(days=365 * 10)
     rows = (await session.execute(
         select(DailyMetrics)
         .where(DailyMetrics.index_code == code, DailyMetrics.date >= cutoff)
@@ -53,58 +62,42 @@ async def _calc_one(session, code: str):
         logger.info('%s: 无数据，跳过', code)
         return
 
-    # 最新一条
     latest = rows[-1]
 
-    # PE 分位数
-    pe_values = np.array([float(r.pe) for r in rows if r.pe is not None])
-    pe_pct = pe_min = pe_max = pe_avg = None
-    if len(pe_values) >= MIN_PE_DAYS and latest.pe is not None:
-        pe_pct = _percentile_rank(pe_values, float(latest.pe))
-        pe_min = float(pe_values.min())
-        pe_max = float(pe_values.max())
-        pe_avg = float(pe_values.mean())
+    pe_vals  = np.array([float(r.pe)  for r in rows if r.pe  is not None])
+    pb_vals  = np.array([float(r.pb)  for r in rows if r.pb  is not None])
+    ps_vals  = np.array([float(r.ps)  for r in rows if r.ps  is not None])
+    dyr_vals = np.array([float(r.dyr) for r in rows if r.dyr is not None])
 
-    # PB 分位数
-    pb_values = np.array([float(r.pb) for r in rows if r.pb is not None])
-    pb_pct = pb_min = pb_max = pb_avg = None
-    if len(pb_values) >= MIN_PE_DAYS and latest.pb is not None:
-        pb_pct = _percentile_rank(pb_values, float(latest.pb))
-        pb_min = float(pb_values.min())
-        pb_max = float(pb_values.max())
-        pb_avg = float(pb_values.mean())
+    pe_pct,  pe_min,  pe_max,  pe_avg  = _calc_metric(pe_vals,  float(latest.pe)  if latest.pe  is not None else None)
+    pb_pct,  pb_min,  pb_max,  pb_avg  = _calc_metric(pb_vals,  float(latest.pb)  if latest.pb  is not None else None)
+    ps_pct,  ps_min,  ps_max,  ps_avg  = _calc_metric(ps_vals,  float(latest.ps)  if latest.ps  is not None else None)
+    dyr_pct, dyr_min, dyr_max, dyr_avg = _calc_metric(dyr_vals, float(latest.dyr) if latest.dyr is not None else None)
 
-    # 综合温度 = (PE分位 + PB分位) / 2，任一为空则为 None
     temperature = (pe_pct + pb_pct) / 2 if (pe_pct is not None and pb_pct is not None) else None
 
-    # upsert index_stats
     existing = await session.get(IndexStats, code)
-    if existing:
-        existing.pe_percentile = pe_pct
-        existing.pb_percentile = pb_pct
-        existing.pe_min = pe_min
-        existing.pe_max = pe_max
-        existing.pe_avg = pe_avg
-        existing.pb_min = pb_min
-        existing.pb_max = pb_max
-        existing.pb_avg = pb_avg
-        existing.temperature = temperature
-        existing.updated_at = datetime.now()
-    else:
-        session.add(IndexStats(
-            index_code=code,
-            pe_percentile=pe_pct,
-            pb_percentile=pb_pct,
-            pe_min=pe_min, pe_max=pe_max, pe_avg=pe_avg,
-            pb_min=pb_min, pb_max=pb_max, pb_avg=pb_avg,
-            temperature=temperature,
-            updated_at=datetime.now(),
-        ))
+    fields = dict(
+        pe_percentile=pe_pct,   pe_min=pe_min,   pe_max=pe_max,   pe_avg=pe_avg,
+        pb_percentile=pb_pct,   pb_min=pb_min,   pb_max=pb_max,   pb_avg=pb_avg,
+        ps_percentile=ps_pct,   ps_min=ps_min,   ps_max=ps_max,   ps_avg=ps_avg,
+        dyr_percentile=dyr_pct, dyr_min=dyr_min, dyr_max=dyr_max, dyr_avg=dyr_avg,
+        temperature=temperature,
+        updated_at=datetime.now(),
+    )
 
-    logger.info('%s: pe_pct=%.1f%% pb_pct=%s rows=%d',
+    if existing:
+        for k, v in fields.items():
+            setattr(existing, k, v)
+    else:
+        session.add(IndexStats(index_code=code, **fields))
+
+    logger.info('%s: pe=%s pb=%s ps=%s dyr=%s rows=%d',
                 code,
-                pe_pct if pe_pct is not None else -1,
-                f'{pb_pct:.1f}%' if pb_pct is not None else 'N/A',
+                f'{pe_pct:.1f}%'  if pe_pct  is not None else 'N/A',
+                f'{pb_pct:.1f}%'  if pb_pct  is not None else 'N/A',
+                f'{ps_pct:.1f}%'  if ps_pct  is not None else 'N/A',
+                f'{dyr_pct:.1f}%' if dyr_pct is not None else 'N/A',
                 len(rows))
 
 
