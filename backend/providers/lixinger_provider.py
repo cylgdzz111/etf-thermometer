@@ -72,10 +72,12 @@ METRICS_LIST = [
 ]
 
 
+HEADERS = {'Accept-Encoding': 'gzip', 'Content-Type': 'application/json'}
+
 def _post_with_retry(payload: dict, retries: int = 3) -> dict:
     for attempt in range(retries):
         try:
-            resp = requests.post(LIXINGER_API, json=payload, timeout=60)
+            resp = requests.post(LIXINGER_API, json=payload, headers=HEADERS, timeout=60)
             resp.raise_for_status()
             return resp.json()
         except Exception as e:
