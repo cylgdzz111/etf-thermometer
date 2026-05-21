@@ -1,0 +1,5 @@
+# 本地图片生成工具依赖（不进 Docker）
+# 安装：pip install -r requirements-tools.txt
+# 安装浏览器：playwright install chromium
+playwright>=1.44
+jinja2>=3.1

@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>ETF温度计 · 今日估值速览</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0E1420;
+    --bg-2:#141B2A;
+    --card:#19222F;
+    --line:rgba(255,255,255,0.06);
+    --line-2:rgba(255,255,255,0.10);
+    --text:#EAEFF7;
+    --text-2:#9AA6B8;
+    --text-3:#5A6577;
+    --green:#00C896;
+    --yellow:#F5A623;
+    --red:#FF4757;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{
+    width:100%;height:100%;
+    background:#000;
+    font-family:"Inter","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--text);
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+  .stage{
+    position:fixed;inset:0;
+    display:flex;align-items:center;justify-content:center;
+    background:#000;
+  }
+  .canvas{
+    width:1080px;height:1440px;
+    position:relative;
+    background:var(--bg);
+    overflow:hidden;
+    transform-origin:center center;
+  }
+  .canvas::before{
+    content:"";position:absolute;inset:0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size:60px 60px;
+    mask-image:radial-gradient(ellipse at center, #000 40%, transparent 90%);
+    -webkit-mask-image:radial-gradient(ellipse at center, #000 40%, transparent 90%);
+    pointer-events:none;
+  }
+  .canvas::after{
+    content:"";position:absolute;inset:0;
+    background:radial-gradient(ellipse at top, rgba(0,200,150,0.05), transparent 55%);
+    pointer-events:none;
+  }
+
+  /* ===== Header ===== */
+  .header{
+    position:relative;
+    padding:60px 72px 0;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .logo{display:flex;align-items:center;gap:12px;}
+  .logo-icon{
+    width:36px;height:36px;
+    display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(180deg,var(--green),#0A8C6B);
+    border-radius:10px;
+    box-shadow:0 0 24px rgba(0,200,150,0.35);
+  }
+  .logo-icon svg{width:20px;height:20px;}
+  .logo-text{
+    font-family:"Noto Sans SC",sans-serif;
+    font-weight:700;font-size:22px;letter-spacing:1px;
+  }
+  .logo-text .sub{
+    display:block;font-size:10px;letter-spacing:3px;color:var(--text-3);
+    font-family:"JetBrains Mono",monospace;font-weight:500;margin-top:2px;
+    text-transform:uppercase;
+  }
+  .date{text-align:right;font-family:"JetBrains Mono",monospace;}
+  .date .d{font-size:24px;font-weight:600;letter-spacing:1px;color:var(--text);}
+  .date .w{font-size:11px;color:var(--text-3);letter-spacing:3px;margin-top:4px;}
+
+  /* ===== Title ===== */
+  .title-wrap{padding:44px 72px 0;}
+  .eyebrow{
+    display:flex;align-items:center;gap:14px;
+    font-family:"JetBrains Mono",monospace;
+    font-size:12px;letter-spacing:4px;color:var(--text-3);
+    text-transform:uppercase;
+    margin-bottom:14px;
+  }
+  .eyebrow::before{
+    content:"";width:36px;height:1px;background:var(--text-3);display:inline-block;
+  }
+  .title{
+    font-family:"Noto Sans SC",sans-serif;
+    font-weight:900;
+    font-size:76px;
+    line-height:1.04;
+    letter-spacing:2px;
+    background:linear-gradient(180deg,#FFFFFF 0%,#B9C4D5 100%);
+    -webkit-background-clip:text;background-clip:text;
+    -webkit-text-fill-color:transparent;
+  }
+  .subtitle{
+    margin-top:14px;
+    font-family:"JetBrains Mono",monospace;
+    font-size:13px;color:var(--text-2);letter-spacing:2px;
+  }
+  .subtitle .dot{color:var(--green);}
+
+  /* ===== Legend chip strip ===== */
+  .legend{
+    margin:30px 72px 0;
+    display:flex;justify-content:space-between;align-items:center;
+    padding:14px 22px;
+    background:rgba(255,255,255,0.02);
+    border:1px solid var(--line);
+    border-radius:14px;
+  }
+  .legend-left{
+    display:flex;gap:22px;align-items:center;
+    font-family:"JetBrains Mono",monospace;
+    font-size:11px;letter-spacing:2px;color:var(--text-2);
+  }
+  .legend-item{display:flex;align-items:center;gap:8px;}
+  .legend-item .sw{width:10px;height:10px;border-radius:3px;}
+  .legend-item .sw.g{background:var(--green);box-shadow:0 0 10px rgba(0,200,150,0.5);}
+  .legend-item .sw.y{background:var(--yellow);box-shadow:0 0 10px rgba(245,166,35,0.5);}
+  .legend-item .sw.r{background:var(--red);box-shadow:0 0 10px rgba(255,71,87,0.5);}
+  .legend-right{
+    font-family:"Noto Sans SC",sans-serif;
+    font-size:11px;color:var(--text-3);letter-spacing:1px;
+  }
+  .legend-right b{color:var(--text-2);font-weight:600;}
+
+  /* ===== List ===== */
+  .list-wrap{margin:24px 72px 0;}
+  .list-head{
+    display:grid;
+    grid-template-columns:180px 1fr 24px;
+    gap:20px;
+    padding:0 4px 12px;
+    border-bottom:1px solid var(--line-2);
+    align-items:end;
+  }
+  .list-head .h-name{
+    font-family:"JetBrains Mono",monospace;
+    font-size:11px;letter-spacing:3px;color:var(--text-3);
+    text-transform:uppercase;
+  }
+  .h-metrics{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:10px;
+  }
+  .h-metric{
+    text-align:center;
+    font-family:"JetBrains Mono",monospace;
+    font-size:11px;letter-spacing:3px;color:var(--text-2);
+    text-transform:uppercase;
+    font-weight:600;
+  }
+  .h-metric .hint{
+    display:block;
+    font-family:"Noto Sans SC",sans-serif;
+    font-size:9px;letter-spacing:1px;color:var(--text-3);
+    margin-top:3px;font-weight:400;
+  }
+  .h-metric.div .hint{color:var(--green);}
+  .h-led{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:2px;color:var(--text-3);text-align:right;}
+
+  .row{
+    display:grid;
+    grid-template-columns:180px 1fr 24px;
+    align-items:center;
+    gap:20px;
+    padding:14px 4px;
+    border-bottom:1px solid var(--line);
+  }
+  .row:last-child{border-bottom:none;}
+  .name{
+    font-family:"Noto Sans SC",sans-serif;
+    font-weight:700;font-size:21px;color:var(--text);
+    letter-spacing:1px;
+  }
+  .name .code{
+    display:block;
+    font-family:"JetBrains Mono",monospace;
+    font-size:11px;color:var(--text-3);font-weight:500;
+    letter-spacing:2px;margin-top:3px;
+  }
+  .metrics{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:10px;
+  }
+  .cell{
+    position:relative;
+    padding:10px 4px 9px;
+    border-radius:10px;
+    background:var(--cell-bg);
+    border:1px solid var(--cell-border);
+    text-align:center;
+    overflow:hidden;
+  }
+  .cell .val{
+    font-family:"JetBrains Mono",monospace;
+    font-weight:700;font-size:22px;color:var(--cell-c);
+    letter-spacing:-1px;line-height:1;
+  }
+  .cell .val .p{font-size:11px;color:var(--cell-c);opacity:0.7;margin-left:1px;}
+  .cell .fill{
+    position:absolute;left:0;bottom:0;height:2px;
+    background:var(--cell-c);
+    width:var(--cell-w,0%);
+  }
+  .led{
+    width:14px;height:14px;border-radius:50%;
+    justify-self:end;
+    box-shadow:0 0 14px currentColor;
+  }
+  .led.g{background:var(--green);color:var(--green);}
+  .led.y{background:var(--yellow);color:var(--yellow);}
+  .led.r{background:var(--red);color:var(--red);}
+
+  /* ===== Footer ===== */
+  .footer{
+    position:absolute;left:72px;right:72px;bottom:40px;
+    padding-top:20px;
+    border-top:1px solid var(--line-2);
+    display:flex;justify-content:space-between;align-items:center;
+    font-family:"JetBrains Mono",monospace;
+  }
+  .foot-left{font-size:11px;color:var(--text-3);letter-spacing:3px;}
+  .foot-left .ver{color:var(--text-2);}
+  .foot-right{display:flex;align-items:center;gap:18px;white-space:nowrap;}
+  .url{
+    font-size:12px;color:var(--text);letter-spacing:0.5px;
+    display:flex;align-items:center;gap:8px;white-space:nowrap;
+  }
+  .url .arrow{color:var(--green);}
+  .swipe{
+    font-family:"Noto Sans SC",sans-serif;
+    font-size:12px;color:var(--text-3);letter-spacing:1px;
+    display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+    animation:swipe 1.8s ease-in-out infinite;
+  }
+  @keyframes swipe{
+    0%,100%{transform:translateX(0);opacity:0.6;}
+    50%{transform:translateX(-6px);opacity:1;}
+  }
+
+  /* Note above footer */
+  .note{
+    position:absolute;left:72px;right:72px;bottom:108px;
+    font-family:"Noto Sans SC",sans-serif;
+    font-size:11px;color:var(--text-3);letter-spacing:1px;
+    text-align:right;
+  }
+  .note b{color:var(--green);font-weight:600;}
+
+  /* Decorative corner ticks */
+  .corner{position:absolute;width:24px;height:24px;border:1px solid var(--line-2);}
+  .corner.tl{top:36px;left:36px;border-right:none;border-bottom:none;}
+  .corner.tr{top:36px;right:36px;border-left:none;border-bottom:none;}
+  .corner.bl{bottom:36px;left:36px;border-right:none;border-top:none;}
+  .corner.br{bottom:36px;right:36px;border-left:none;border-top:none;}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="canvas" id="canvas">
+
+    <span class="corner tl"></span>
+    <span class="corner tr"></span>
+    <span class="corner bl"></span>
+    <span class="corner br"></span>
+
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="9" y="2" width="6" height="14" rx="3" stroke="#0E1420" stroke-width="2"/>
+            <circle cx="12" cy="18" r="3.5" fill="#0E1420"/>
+            <rect x="11" y="6" width="2" height="9" rx="1" fill="#0E1420"/>
+          </svg>
+        </div>
+        <div class="logo-text">
+          ETF温度计
+          <span class="sub">VALUATION DASHBOARD</span>
+        </div>
+      </div>
+      <div class="date">
+        <div class="d">{{ date_mmdd }}</div>
+        <div class="w">{{ date_weekday }}</div>
+      </div>
+    </header>
+
+    <!-- Title -->
+    <section class="title-wrap">
+      <div class="eyebrow">DAILY · 每日速览</div>
+      <h1 class="title">今日<br/>估值速览</h1>
+      <div class="subtitle"><span class="dot">●</span> PE · PS · PB · 股息率 四维分位 · 一图速读</div>
+    </section>
+
+    <!-- Legend -->
+    <section class="legend">
+      <div class="legend-left">
+        <div class="legend-item"><span class="sw g"></span>低估 &lt; 30%</div>
+        <div class="legend-item"><span class="sw y"></span>合理 30 – 70%</div>
+        <div class="legend-item"><span class="sw r"></span>高估 &gt; 70%</div>
+      </div>
+      <div class="legend-right"><b>近 10 年</b>历史分位</div>
+    </section>
+
+    <!-- List -->
+    <section class="list-wrap">
+      <div class="list-head">
+        <span class="h-name">指数 / INDEX</span>
+        <div class="h-metrics">
+          <div class="h-metric">PE<span class="hint">市盈率</span></div>
+          <div class="h-metric">PS<span class="hint">市销率</span></div>
+          <div class="h-metric">PB<span class="hint">市净率</span></div>
+          <div class="h-metric div">DIV<span class="hint">股息率 ↑佳</span></div>
+        </div>
+        <span class="h-led">综合</span>
+      </div>
+      <div class="list" id="list"></div>
+    </section>
+
+    <div class="note">* <b>股息率</b>分位越高 = 估值越便宜（颜色已反向映射）</div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="foot-left">DATA · 18:00 CST&nbsp;&nbsp;·&nbsp;&nbsp;<span class="ver">V 2.6</span></div>
+      <div class="foot-right">
+        <div class="url">etf-thermometer.com <span class="arrow">→</span></div>
+        <div class="swipe">左滑看详情 →</div>
+      </div>
+    </footer>
+
+  </div>
+</div>
+
+<script>
+  const indices = {{ indices_json }};
+
+  // ===== Color helpers
+  const COLORS = {
+    g:{c:"#00C896", bg:"rgba(0,200,150,0.12)",  border:"rgba(0,200,150,0.28)"},
+    y:{c:"#F5A623", bg:"rgba(245,166,35,0.12)", border:"rgba(245,166,35,0.28)"},
+    r:{c:"#FF4757", bg:"rgba(255,71,87,0.14)",  border:"rgba(255,71,87,0.30)"},
+  };
+  // Normal mapping: low pct = green
+  function sigNormal(pct){
+    if(pct < 30) return "g";
+    if(pct < 70) return "y";
+    return "r";
+  }
+  // Inverted mapping for dividend yield: high pct = green
+  function sigInverted(pct){
+    if(pct > 70) return "g";
+    if(pct > 30) return "y";
+    return "r";
+  }
+  // Overall composite: average using inverted div
+  function composite(idx){
+    const score = (idx.pe + idx.ps + idx.pb + (100 - idx.div)) / 4;
+    return sigNormal(score);
+  }
+
+  function cellHTML(pct, inverted=false){
+    const sig = inverted ? sigInverted(pct) : sigNormal(pct);
+    const col = COLORS[sig];
+    const style = `--cell-bg:${col.bg};--cell-border:${col.border};--cell-c:${col.c};--cell-w:${pct}%`;
+    return `<div class="cell" style="${style}">
+      <div class="val">${pct}<span class="p">%</span></div>
+      <div class="fill"></div>
+    </div>`;
+  }
+
+  const list = document.getElementById('list');
+  indices.forEach(idx => {
+    const overall = composite(idx);
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `
+      <div class="name">${idx.name}<span class="code">${idx.code}</span></div>
+      <div class="metrics">
+        ${cellHTML(idx.pe)}
+        ${cellHTML(idx.ps)}
+        ${cellHTML(idx.pb)}
+        ${cellHTML(idx.div, true)}
+      </div>
+      <div class="led ${overall}"></div>
+    `;
+    list.appendChild(row);
+  });
+
+  // ===== Auto scale
+  function scale(){
+    const c = document.getElementById('canvas');
+    const sx = window.innerWidth / 1080;
+    const sy = window.innerHeight / 1440;
+    const s = Math.min(sx, sy);
+    c.style.transform = `scale(${s})`;
+  }
+  scale();
+  window.addEventListener('resize', scale);
+</script>
+</body>
+</html>

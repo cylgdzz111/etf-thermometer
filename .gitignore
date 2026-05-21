@@ -17,3 +17,6 @@ frontend/dist/
 # Misc
 .DS_Store
 *.log
+
+# 生成的图片
+output/

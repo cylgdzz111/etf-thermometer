@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>ETF温度计 · 指数估值详情</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0E1420;
+    --card:#19222F;
+    --line:rgba(255,255,255,0.06);
+    --line-2:rgba(255,255,255,0.10);
+    --text:#EAEFF7;
+    --text-2:#9AA6B8;
+    --text-3:#5A6577;
+    --green:#00C896;
+    --yellow:#F5A623;
+    --red:#FF4757;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{
+    width:100%;height:100%;
+    background:#000;
+    font-family:"Inter","Noto Sans SC","PingFang SC",sans-serif;
+    color:var(--text);
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+  .stage{
+    position:fixed;inset:0;
+    display:flex;align-items:center;justify-content:center;
+    background:#000;
+  }
+  .canvas{
+    width:1080px;height:1440px;
+    position:relative;
+    background:var(--bg);
+    overflow:hidden;
+    transform-origin:center center;
+  }
+  .canvas::before{
+    content:"";position:absolute;inset:0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size:60px 60px;
+    mask-image:radial-gradient(ellipse at center, #000 40%, transparent 90%);
+    -webkit-mask-image:radial-gradient(ellipse at center, #000 40%, transparent 90%);
+    pointer-events:none;
+  }
+  .canvas::after{
+    content:"";position:absolute;inset:0;
+    background:radial-gradient(ellipse at top, rgba(0,200,150,0.05), transparent 55%);
+    pointer-events:none;
+  }
+
+  /* ===== Header ===== */
+  .header{
+    position:relative;
+    padding:56px 72px 0;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .logo{display:flex;align-items:center;gap:12px;}
+  .logo-icon{
+    width:36px;height:36px;
+    display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(180deg,var(--green),#0A8C6B);
+    border-radius:10px;
+    box-shadow:0 0 24px rgba(0,200,150,0.35);
+  }
+  .logo-icon svg{width:20px;height:20px;}
+  .logo-text{
+    font-family:"Noto Sans SC",sans-serif;
+    font-weight:700;font-size:22px;letter-spacing:1px;
+  }
+  .logo-text .sub{
+    display:block;font-size:10px;letter-spacing:3px;color:var(--text-3);
+    font-family:"JetBrains Mono",monospace;font-weight:500;margin-top:2px;
+    text-transform:uppercase;
+  }
+  .date{text-align:right;font-family:"JetBrains Mono",monospace;}
+  .date .d{font-size:24px;font-weight:600;letter-spacing:1px;color:var(--text);}
+  .date .w{font-size:11px;color:var(--text-3);letter-spacing:3px;margin-top:4px;}
+
+  /* ===== Index identity ===== */
+  .identity{
+    margin:34px 72px 0;
+    display:grid;grid-template-columns:1fr auto;
+    gap:24px;align-items:end;
+    padding-bottom:22px;
+    border-bottom:1px solid var(--line-2);
+  }
+  .id-left .eyebrow{
+    font-family:"JetBrains Mono",monospace;
+    font-size:11px;letter-spacing:4px;color:var(--text-3);
+    text-transform:uppercase;
+    margin-bottom:10px;
+    display:flex;align-items:center;gap:10px;
+  }
+  .id-left .eyebrow::before{
+    content:"";width:30px;height:1px;background:var(--text-3);
+  }
+  .id-name{
+    font-family:"Noto Sans SC",sans-serif;
+    font-weight:900;font-size:84px;
+    letter-spacing:2px;line-height:1;
+    background:linear-gradient(180deg,#FFFFFF 0%,#B9C4D5 100%);
+    -webkit-background-clip:text;background-clip:text;
+    -webkit-text-fill-color:transparent;
+  }
+  .id-meta{
+    margin-top:14px;
+    font-family:"JetBrains Mono",monospace;
+    font-size:13px;color:var(--text-2);letter-spacing:2px;
+  }
+  .id-meta .sep{color:var(--text-3);margin:0 10px;}
+  .id-right{text-align:right;}
+  .id-price{
+    font-family:"JetBrains Mono",monospace;
+    font-weight:700;font-size:46px;letter-spacing:-1px;line-height:1;
+    color:var(--text);
+  }
+  .id-change{
+    margin-top:10px;
+    font-family:"JetBrains Mono",monospace;
+    font-size:15px;font-weight:600;
+    color:var(--red);
+    letter-spacing:1px;
+  }
+  .id-change.up{color:var(--red);}   /* A-shares: red = up */
+  .id-change.down{color:var(--green);}
+
+  /* ===== Charts ===== */
+  .charts{
+    margin:24px 72px 0;
+    display:flex;flex-direction:column;gap:14px;
+  }
+  .chart{
+    background:rgba(255,255,255,0.015);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:18px 22px 14px;
+  }
+  .chart-head{
+    display:flex;justify-content:space-between;align-items:center;
+    margin-bottom:6px;
+  }
+  .chart-title{
+    display:flex;align-items:baseline;gap:10px;
+  }
+  .chart-title .zh{
+    font-family:"Noto Sans SC",sans-serif;
+    font-weight:700;font-size:18px;color:var(--text);
+    letter-spacing:1px;
+  }
+  .chart-title .en{
+    font-family:"JetBrains Mono",monospace;
+    font-size:11px;color:var(--text-3);letter-spacing:3px;
+    text-transform:uppercase;
+  }
+  .chart-now{
+    display:flex;align-items:baseline;gap:10px;
+  }
+  .now-label{
+    font-family:"JetBrains Mono",monospace;
+    font-size:10px;color:var(--text-3);letter-spacing:2px;
+  }
+  .now-val{
+    font-family:"JetBrains Mono",monospace;
+    font-weight:700;font-size:22px;color:var(--text);letter-spacing:-0.5px;
+  }
+  .now-pct{
+    font-family:"JetBrains Mono",monospace;
+    font-weight:600;font-size:13px;letter-spacing:1px;
+    padding:3px 8px;border-radius:6px;
+  }
+  .now-pct.g{color:var(--green);background:rgba(0,200,150,0.12);border:1px solid rgba(0,200,150,0.3);}
+  .now-pct.y{color:var(--yellow);background:rgba(245,166,35,0.12);border:1px solid rgba(245,166,35,0.3);}
+  .now-pct.r{color:var(--red);background:rgba(255,71,87,0.12);border:1px solid rgba(255,71,87,0.3);}
+
+  svg.chart-svg{display:block;width:100%;height:auto;}
+
+  /* ===== Legend bar (bottom) ===== */
+  .legend-strip{
+    margin:14px 72px 0;
+    display:flex;justify-content:center;gap:32px;
+    font-family:"JetBrains Mono",monospace;
+    font-size:11px;color:var(--text-2);letter-spacing:2px;
+  }
+  .lg{display:flex;align-items:center;gap:8px;}
+  .lg .line{width:24px;height:0;border-top:2px solid;}
+  .lg .line.dash{border-top:2px dashed;}
+  .lg.indicator .line{border-color:#FFFFFF;}
+  .lg.price .line{border-color:var(--text-3);}
+  .lg.p30 .line{border-color:var(--green);}
+  .lg.p50 .line{border-color:var(--yellow);}
+  .lg.p80 .line{border-color:var(--red);}
+
+  /* ===== Footer ===== */
+  .footer{
+    position:absolute;left:72px;right:72px;bottom:40px;
+    padding-top:20px;
+    border-top:1px solid var(--line-2);
+    display:flex;justify-content:space-between;align-items:center;
+    font-family:"JetBrains Mono",monospace;
+  }
+  .foot-left{font-size:11px;color:var(--text-3);letter-spacing:3px;}
+  .foot-left .ver{color:var(--text-2);}
+  .foot-right{display:flex;align-items:center;gap:18px;white-space:nowrap;}
+  .url{font-size:12px;color:var(--text);letter-spacing:0.5px;display:flex;align-items:center;gap:8px;}
+  .url .arrow{color:var(--green);}
+  .swipe{
+    font-family:"Noto Sans SC",sans-serif;
+    font-size:12px;color:var(--text-3);letter-spacing:1px;
+    display:inline-flex;align-items:center;gap:6px;
+    animation:swipe 1.8s ease-in-out infinite;
+  }
+  @keyframes swipe{
+    0%,100%{transform:translateX(0);opacity:0.6;}
+    50%{transform:translateX(-6px);opacity:1;}
+  }
+
+  /* Decorative corner ticks */
+  .corner{position:absolute;width:24px;height:24px;border:1px solid var(--line-2);}
+  .corner.tl{top:36px;left:36px;border-right:none;border-bottom:none;}
+  .corner.tr{top:36px;right:36px;border-left:none;border-bottom:none;}
+  .corner.bl{bottom:36px;left:36px;border-right:none;border-top:none;}
+  .corner.br{bottom:36px;right:36px;border-left:none;border-top:none;}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="canvas" id="canvas">
+
+    <span class="corner tl"></span>
+    <span class="corner tr"></span>
+    <span class="corner bl"></span>
+    <span class="corner br"></span>
+
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="9" y="2" width="6" height="14" rx="3" stroke="#0E1420" stroke-width="2"/>
+            <circle cx="12" cy="18" r="3.5" fill="#0E1420"/>
+            <rect x="11" y="6" width="2" height="9" rx="1" fill="#0E1420"/>
+          </svg>
+        </div>
+        <div class="logo-text">
+          ETF温度计
+          <span class="sub">VALUATION DETAIL</span>
+        </div>
+      </div>
+      <div class="date">
+        <div class="d">{{ date_mmdd }}</div>
+        <div class="w">{{ date_weekday }}</div>
+      </div>
+    </header>
+
+    <!-- Identity -->
+    <section class="identity">
+      <div class="id-left">
+        <div class="eyebrow">INDEX · 指数估值详情</div>
+        <div class="id-name">{{ index_name }}</div>
+        <div class="id-meta">{{ index_code }}</div>
+      </div>
+      <div class="id-right">
+        <div class="id-price">{{ close_fmt }}</div>
+      </div>
+    </section>
+
+    <!-- Charts -->
+    <section class="charts" id="charts"></section>
+
+    <!-- Legend -->
+    <div class="legend-strip">
+      <div class="lg indicator"><span class="line"></span>指标</div>
+      <div class="lg price"><span class="line dash"></span>点位</div>
+      <div class="lg p30"><span class="line dash"></span>30% 分位</div>
+      <div class="lg p50"><span class="line dash"></span>50% 分位</div>
+      <div class="lg p80"><span class="line dash"></span>80% 分位</div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="foot-left">DATA · 10Y · 18:00 CST&nbsp;&nbsp;·&nbsp;&nbsp;<span class="ver">V 2.6</span></div>
+      <div class="foot-right">
+        <div class="url">etf-thermometer.com <span class="arrow">→</span></div>
+        <div class="swipe">左滑看更多 →</div>
+      </div>
+    </footer>
+
+  </div>
+</div>
+
+<script>
+  // ============================================================
+  // DATA — injected by generate_images.py via Jinja2
+  // ============================================================
+  const SERIES  = {{ series_json }};   // {price, pe, pb, ps} — daily arrays, nulls allowed
+  const DATES   = {{ dates_json }};    // ['2015-01-05', ...]
+  const PCTILES = {{ pctiles_json }};  // {pe:{p30,p50,p80}, pb:..., ps:...}
+  const CURRENT = {{ current_json }};  // {pe:{val,pct,sig}, pb:..., ps:...}
+
+  // ============================================================
+  // Helpers
+  // ============================================================
+  // Line path with null gap support
+  function linePath(values, w, h, minV, maxV){
+    const n = values.length;
+    let d = '', moveTo = true;
+    for(let i=0;i<n;i++){
+      const v = values[i];
+      if(v===null||v===undefined){moveTo=true;continue;}
+      const x = (i/(n-1))*w;
+      const y = h - ((v-minV)/(maxV-minV))*h;
+      d += ` ${moveTo?'M':'L'} ${x.toFixed(1)},${y.toFixed(1)}`;
+      moveTo = false;
+    }
+    return d.trim();
+  }
+
+  function areaPath(values, w, h, minV, maxV){
+    const n = values.length;
+    const firstIdx = values.findIndex(v=>v!=null);
+    const lastIdx  = values.reduceRight((a,v,i)=>a===-1&&v!=null?i:a,-1);
+    if(firstIdx===-1) return '';
+    const line = linePath(values, w, h, minV, maxV);
+    const lx = (lastIdx/(n-1))*w, fx = (firstIdx/(n-1))*w;
+    return `${line} L${lx.toFixed(1)},${h} L${fx.toFixed(1)},${h} Z`;
+  }
+
+  function niceRange(values, padLow=0.05, padHigh=0.10){
+    const vals = values.filter(v=>v!=null&&!isNaN(v));
+    if(!vals.length) return [0,1];
+    let mn=Math.min(...vals), mx=Math.max(...vals);
+    const span = mx-mn||1;
+    return [mn-span*padLow, mx+span*padHigh];
+  }
+
+  // Compute year tick positions from date array
+  function yearTicks(dates){
+    if(!dates.length) return [];
+    const fy=parseInt(dates[0].slice(0,4)), ly=parseInt(dates[dates.length-1].slice(0,4));
+    const step=(ly-fy)>8?2:1;
+    const res=[];
+    for(let yr=Math.ceil((fy+1)/step)*step;yr<=ly;yr+=step){
+      const idx=dates.findIndex(d=>d.startsWith(String(yr)));
+      if(idx>=0) res.push({yr,idx});
+    }
+    return res;
+  }
+
+  function fmt(v, decimals){
+    if(v===null||v===undefined) return '—';
+    return decimals>0 ? v.toFixed(decimals) : Math.round(v).toLocaleString();
+  }
+
+  // ============================================================
+  // Render
+  // ============================================================
+  const W = 936;
+  const PAD_L = 50, PAD_R = 56, PAD_T = 8, PAD_B = 22;
+  const CHART_H = 188;
+  const PLOT_W = W - PAD_L - PAD_R;
+  const PLOT_H = CHART_H - PAD_T - PAD_B;
+
+  const priceSeries = SERIES.price;
+  const [priceMin, priceMax] = niceRange(priceSeries, 0.1, 0.1);
+
+  function renderChart({code, zh, en, series, pcts, current, decimals}){
+    const validVals = series.filter(v=>v!=null);
+    const allVals = validVals.concat([pcts.p30,pcts.p50,pcts.p80].filter(v=>v!=null));
+    const [mn, mx] = niceRange(allVals, 0.10, 0.14);
+    const n = series.length;
+
+    const yOf = v => PAD_T + PLOT_H - ((v-mn)/(mx-mn))*PLOT_H;
+
+    const indPath  = linePath(series, PLOT_W, PLOT_H, mn, mx);
+    const indArea  = areaPath(series, PLOT_W, PLOT_H, mn, mx);
+    const pricePath = linePath(priceSeries, PLOT_W, PLOT_H, priceMin, priceMax);
+
+    const yP30 = PLOT_H - ((pcts.p30-mn)/(mx-mn))*PLOT_H;
+    const yP50 = PLOT_H - ((pcts.p50-mn)/(mx-mn))*PLOT_H;
+    const yP80 = PLOT_H - ((pcts.p80-mn)/(mx-mn))*PLOT_H;
+
+    // Y-axis ticks
+    const ticks = 4;
+    let yLabels='', yLabelsR='';
+    for(let i=0;i<=ticks;i++){
+      const v = mn+(mx-mn)*(1-i/ticks);
+      const y = PAD_T+(PLOT_H/ticks)*i;
+      yLabels += `<line x1="${PAD_L}" y1="${y.toFixed(1)}" x2="${PAD_L+PLOT_W}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>`;
+      yLabels += `<text x="${PAD_L-8}" y="${(y+3).toFixed(1)}" text-anchor="end" fill="#5A6577" font-family="JetBrains Mono" font-size="9" letter-spacing="0.5">${fmt(v,decimals)}</text>`;
+      const vp = priceMin+(priceMax-priceMin)*(1-i/ticks);
+      yLabelsR += `<text x="${PAD_L+PLOT_W+8}" y="${(y+3).toFixed(1)}" text-anchor="start" fill="#3F4757" font-family="JetBrains Mono" font-size="9" letter-spacing="0.5">${Math.round(vp).toLocaleString()}</text>`;
+    }
+
+    // X-axis: year ticks from actual dates
+    let xLabels='';
+    yearTicks(DATES).forEach(({yr,idx})=>{
+      const x = PAD_L + (idx/(n-1))*PLOT_W;
+      xLabels += `<text x="${x}" y="${CHART_H-4}" text-anchor="middle" fill="#5A6577" font-family="JetBrains Mono" font-size="9" letter-spacing="1">${yr}</text>`;
+    });
+
+    // End dot at last non-null value
+    const lastIdx = series.reduceRight((a,v,i)=>a===-1&&v!=null?i:a,-1);
+    const lastV   = lastIdx>=0 ? series[lastIdx] : null;
+    const endX    = lastIdx>=0 ? (lastIdx/(n-1))*PLOT_W : PLOT_W;
+    const endYInPlot = lastV!=null ? PLOT_H-((lastV-mn)/(mx-mn))*PLOT_H : PLOT_H/2;
+
+    const cP30='var(--green)', cP50='var(--yellow)', cP80='var(--red)';
+
+    return `
+      <div class="chart">
+        <div class="chart-head">
+          <div class="chart-title">
+            <span class="zh">${zh}</span>
+            <span class="en">${en}</span>
+          </div>
+          <div class="chart-now">
+            <span class="now-label">CURRENT</span>
+            <span class="now-val">${fmt(current.val, decimals)}</span>
+            <span class="now-pct ${current.sig}">${current.pct}% 分位</span>
+          </div>
+        </div>
+        <svg class="chart-svg" viewBox="0 0 ${W} ${CHART_H}" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="grad-${code}" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.18"/>
+              <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          ${yLabels}${yLabelsR}
+          <g transform="translate(${PAD_L},0)">
+            <line x1="0" y1="${(PAD_T+yP30).toFixed(1)}" x2="${PLOT_W}" y2="${(PAD_T+yP30).toFixed(1)}" stroke="${cP30}" stroke-width="1" stroke-dasharray="4 4" opacity="0.85"/>
+            <line x1="0" y1="${(PAD_T+yP50).toFixed(1)}" x2="${PLOT_W}" y2="${(PAD_T+yP50).toFixed(1)}" stroke="${cP50}" stroke-width="1" stroke-dasharray="4 4" opacity="0.85"/>
+            <line x1="0" y1="${(PAD_T+yP80).toFixed(1)}" x2="${PLOT_W}" y2="${(PAD_T+yP80).toFixed(1)}" stroke="${cP80}" stroke-width="1" stroke-dasharray="4 4" opacity="0.85"/>
+            <g font-family="JetBrains Mono" font-size="9" letter-spacing="1">
+              <text x="${PLOT_W-6}" y="${(PAD_T+yP30-4).toFixed(1)}" text-anchor="end" fill="${cP30}" opacity="0.9">30%</text>
+              <text x="${PLOT_W-6}" y="${(PAD_T+yP50-4).toFixed(1)}" text-anchor="end" fill="${cP50}" opacity="0.9">50%</text>
+              <text x="${PLOT_W-6}" y="${(PAD_T+yP80-4).toFixed(1)}" text-anchor="end" fill="${cP80}" opacity="0.9">80%</text>
+            </g>
+            <g transform="translate(0,${PAD_T})">
+              <path d="${pricePath}" fill="none" stroke="#5A6577" stroke-width="1.3" stroke-dasharray="3 3" opacity="0.65"/>
+            </g>
+            <g transform="translate(0,${PAD_T})">
+              <path d="${indArea}" fill="url(#grad-${code})"/>
+              <path d="${indPath}" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="${endX.toFixed(1)}" cy="${endYInPlot.toFixed(1)}" r="4.5" fill="#FFFFFF"/>
+              <circle cx="${endX.toFixed(1)}" cy="${endYInPlot.toFixed(1)}" r="9" fill="#FFFFFF" opacity="0.18"/>
+            </g>
+          </g>
+          ${xLabels}
+        </svg>
+      </div>
+    `;
+  }
+
+  const html = [
+    renderChart({code:'pe', zh:'市盈率 PE-TTM', en:'PRICE / EARNINGS', series:SERIES.pe, pcts:PCTILES.pe, current:CURRENT.pe, decimals:1}),
+    renderChart({code:'pb', zh:'市净率 PB',     en:'PRICE / BOOK',     series:SERIES.pb, pcts:PCTILES.pb, current:CURRENT.pb, decimals:2}),
+    renderChart({code:'ps', zh:'市销率 PS-TTM', en:'PRICE / SALES',    series:SERIES.ps, pcts:PCTILES.ps, current:CURRENT.ps, decimals:2}),
+  ].join('');
+
+  document.getElementById('charts').innerHTML = html;
+
+  // ============================================================
+  // Auto scale
+  // ============================================================
+  function scale(){
+    const c = document.getElementById('canvas');
+    const sx = window.innerWidth / 1080;
+    const sy = window.innerHeight / 1440;
+    const s = Math.min(sx, sy);
+    c.style.transform = `scale(${s})`;
+  }
+  scale();
+  window.addEventListener('resize', scale);
+</script>
+</body>
+</html>
