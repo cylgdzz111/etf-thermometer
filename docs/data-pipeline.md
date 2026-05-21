@@ -20,10 +20,14 @@ LIXINGER_TOKEN=你的理杏仁Token
 
 ```bash
 cd backend
+# 全部 A 股指数
 python -m scripts.fetch_daily --lixinger-enrich
+
+# 指定指数（空格分隔）
+python -m scripts.fetch_daily --lixinger-enrich --codes 000300 000016 000905
 ```
 
-- 对 `indices` 表中每个 A 股指数**逐个**发请求，带完整日期区间（近 11 年）
+- 对指定（或全部）A 股指数**逐个**发请求，带完整日期区间（近 11 年）
 - API 限制：传日期区间时每次只能请求 **1 个**指数
 - 数据写入 `daily_metrics`（pe / pb / ps / dyr 字段）
 - 原始响应同时缓存到 `lixinger_fundamentals` 表

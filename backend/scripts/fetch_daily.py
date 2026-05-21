@@ -193,11 +193,12 @@ async def _apply_lixinger_records(records: list) -> int:
     return updated
 
 
-async def run_lixinger_enrich(is_backfill: bool = False):
+async def run_lixinger_enrich(is_backfill: bool = False, codes: list[str] | None = None):
     """用理杏仁数据补充 daily_metrics 中缺失的 PE/PB（仅 cn 市场）
 
     is_backfill=True : 逐个指数拉 11 年历史（API 限制：有日期范围时只能传 1 个 code）
     is_backfill=False: 批量拉所有指数最新一条（API 允许最多 100 个 code）
+    codes            : 指定指数列表，默认为数据库中全部 cn 市场指数
     """
     if not settings.LIXINGER_TOKEN:
         logger.info('LIXINGER_TOKEN 未配置，跳过理杏仁增强')
@@ -205,10 +206,18 @@ async def run_lixinger_enrich(is_backfill: bool = False):
 
     logger.info('=== 开始理杏仁 PE/PB 增强（%s）===', '历史回填' if is_backfill else '每日增量')
 
-    async with AsyncSessionLocal() as session:
-        indices = (await session.execute(
-            select(Index).where(Index.market == 'cn')
-        )).scalars().all()
+    if codes:
+        # 使用指定的指数列表
+        async with AsyncSessionLocal() as session:
+            indices = (await session.execute(
+                select(Index).where(Index.market == 'cn', Index.code.in_(codes))
+            )).scalars().all()
+        logger.info('指定指数：%s', ', '.join(codes))
+    else:
+        async with AsyncSessionLocal() as session:
+            indices = (await session.execute(
+                select(Index).where(Index.market == 'cn')
+            )).scalars().all()
 
     lixinger = LixingerProvider()
 
@@ -226,14 +235,14 @@ async def run_lixinger_enrich(is_backfill: bool = False):
             logger.info('%s: 理杏仁更新 %d 条 PE/PB', idx.code, updated)
     else:
         # 批量获取最新一条，最多 100 个 code 一次
-        codes = [idx.code for idx in indices]
+        batch_codes = [idx.code for idx in indices]
         try:
-            records = lixinger.get_latest_batch(codes)
+            records = lixinger.get_latest_batch(batch_codes)
         except DataFetchError as e:
             logger.warning('理杏仁批量增强失败: %s', e)
             return
         updated = await _apply_lixinger_records(records)
-        logger.info('理杏仁批量更新 %d 条 PE/PB（%d 个指数）', updated, len(codes))
+        logger.info('理杏仁批量更新 %d 条 PE/PB（%d 个指数）', updated, len(batch_codes))
 
     logger.info('=== 理杏仁 PE/PB 增强完成 ===')
 
@@ -325,14 +334,14 @@ async def run_backfill_from_lixinger_cache():
     logger.info('=== 回填完成：共更新 %d 条，新增 %d 条 ===', total_updated, total_inserted)
 
 
-async def main_async(mode: str):
+async def main_async(mode: str, codes: list[str] | None = None):
     try:
         if mode == 'backfill':
             await run_backfill()
         elif mode == 'fix_pe':
             await run_fix_pe()
         elif mode == 'lixinger_enrich':
-            await run_lixinger_enrich()
+            await run_lixinger_enrich(is_backfill=True, codes=codes)
         elif mode == 'backfill_cache':
             await run_backfill_from_lixinger_cache()
         else:
@@ -347,6 +356,7 @@ def main():
     parser.add_argument('--backfill', action='store_true', help='历史回填后退出')
     parser.add_argument('--fix-pe', action='store_true', help='补充 PE/PB 为 NULL 的历史记录')
     parser.add_argument('--lixinger-enrich', action='store_true', help='仅运行理杏仁 PE/PB 增强')
+    parser.add_argument('--codes', nargs='+', metavar='CODE', help='指定指数代码，配合 --lixinger-enrich 使用')
     args = parser.parse_args()
 
     if args.backfill:
@@ -358,7 +368,7 @@ def main():
         return
 
     if args.lixinger_enrich:
-        asyncio.run(main_async('lixinger_enrich'))
+        asyncio.run(main_async('lixinger_enrich', codes=args.codes))
         return
 
     if args.now:
