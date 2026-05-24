@@ -16,7 +16,7 @@ router = APIRouter()
 # 各市场首页展示的宽基指数，顺序即卡片顺序
 HEADLINE_CODES: dict[str, list[str]] = {
     'cn': ['000300', '000016', '000905', '000852', '399006', '000688'],
-    'hk': [],
+    'hk': ['HSI', 'HSTECH'],
     'us': [],
 }
 

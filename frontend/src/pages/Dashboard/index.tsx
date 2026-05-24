@@ -173,20 +173,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Sector heatmap */}
-      {data.sectors.length > 0 && (
-        <>
-          <div className="section-head">
-            <h2 className="section-title">
-              行业温度图
-              <span className="count">{data.sectors.length} 个行业</span>
-            </h2>
-          </div>
-          <div className="sector-grid">
-            {data.sectors.map(s => <SectorCell key={s.name} s={s} />)}
-          </div>
-        </>
-      )}
+      {/* Sector heatmap — 暂时隐藏 */}
     </div>
   );
 }

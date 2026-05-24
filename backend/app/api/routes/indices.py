@@ -21,6 +21,8 @@ from ...schemas.index import (
 router = APIRouter()
 
 SPARKLINE_DAYS = 60
+# 60 个交易日 ≈ 85 个自然日，取 100 天留足节假日余量
+SPARKLINE_CUTOFF_DAYS = 100
 DIST_BINS = 20
 MIN_STAT_DAYS = 20   # 区间内至少有这么多非空值才计算分位线
 
@@ -116,10 +118,11 @@ async def list_indices(
         )).scalars().all()
     }
 
+    spark_cutoff = date.today() - timedelta(days=SPARKLINE_CUTOFF_DAYS)
     spark_raw: dict[str, list[float]] = defaultdict(list)
     for row in (await db.execute(
         select(DM.index_code, DM.date, DM.close)
-        .where(DM.index_code.in_(codes), DM.close.isnot(None))
+        .where(DM.index_code.in_(codes), DM.close.isnot(None), DM.date >= spark_cutoff)
         .order_by(DM.index_code, DM.date.desc())
     )).all():
         if len(spark_raw[row.index_code]) < SPARKLINE_DAYS:
