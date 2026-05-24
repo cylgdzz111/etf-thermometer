@@ -9,7 +9,7 @@ export default function Nav() {
     <nav className="nav">
       <div className="nav-inner">
         <div className="brand">
-          <span className="brand-mark" />
+          <img src="/image.png" className="brand-mark" alt="ETF温度计" />
           <span className="brand-name">ETF 温度计 <em>Thermometer</em></span>
         </div>
 
