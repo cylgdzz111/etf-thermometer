@@ -222,8 +222,9 @@ async def run_lixinger_enrich(is_backfill: bool = False, codes: list[str] | None
     lixinger = LixingerProvider()
 
     if is_backfill:
-        # 逐个指数，带完整日期区间
-        start_date = date(date.today().year - BACKFILL_YEARS, 1, 1)
+        # 逐个指数，带完整日期区间（理杏仁限制最多10年）
+        today = date.today()
+        start_date = date(today.year - 10, today.month, today.day)
         for idx in indices:
             logger.info('理杏仁历史回填 %s %s', idx.code, idx.name)
             try:

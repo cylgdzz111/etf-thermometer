@@ -21,10 +21,10 @@ LIXINGER_TOKEN=你的理杏仁Token
 ```bash
 cd backend
 # 全部 A 股指数
-python -m scripts.fetch_daily --lixinger-enrich
+.venv/bin/python -m scripts.fetch_daily --lixinger-enrich
 
 # 指定指数（空格分隔）
-python -m scripts.fetch_daily --lixinger-enrich --codes 000300 000016 000905
+.venv/bin/python -m scripts.fetch_daily --lixinger-enrich --codes 000905
 ```
 
 - 对指定（或全部）A 股指数**逐个**发请求，带完整日期区间（近 11 年）

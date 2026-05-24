@@ -78,6 +78,8 @@ def _post_with_retry(payload: dict, retries: int = 3) -> dict:
     for attempt in range(retries):
         try:
             resp = requests.post(LIXINGER_API, json=payload, headers=HEADERS, timeout=60)
+            if not resp.ok:
+                logger.error('理杏仁 HTTP %s，响应: %s', resp.status_code, resp.text[:300])
             resp.raise_for_status()
             return resp.json()
         except Exception as e:
