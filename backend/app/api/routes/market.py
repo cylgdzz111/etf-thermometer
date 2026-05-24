@@ -52,7 +52,7 @@ async def get_market_overview(market: str, db: AsyncSession = Depends(get_db)):
 
     # 1. 指数主数据
     idx_rows = (await db.execute(
-        select(Index).where(Index.market == market)
+        select(Index).where(Index.market == market, Index.is_active == True)  # noqa: E712
     )).scalars().all()
     if not idx_rows:
         return empty

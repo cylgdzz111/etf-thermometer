@@ -53,7 +53,7 @@ python -m scripts.fetch_daily --now
 拉取完数据后，单独重算分位数：
 
 ```bash
-python -m scripts.calc_stats
+.venv/bin/python -m scripts.calc_stats
 ```
 
 > `--now` 和 `--lixinger-enrich` 执行完毕后会自动触发，通常无需手动运行。

@@ -29,8 +29,17 @@ from app.models.index_stats import IndexStats
 TEMPLATES_DIR = Path(__file__).parent.parent / 'templates'
 OUTPUT_DIR    = Path(__file__).parent.parent.parent / 'output'
 
-# 每日汇总展示的指数（按顺序）
-SUMMARY_CODES = ['000300', '000016', '000905', '000852', '399006', '000688', '000922']
+# 每日汇总展示的指数分组（按市场）
+SUMMARY_GROUPS = {
+    'cn': {
+        'label': 'A股',
+        'codes': ['000300', '000016', '000905', '000852', '399006', '000688', '000922'],
+    },
+    'hk': {
+        'label': '港股',
+        'codes': ['HSI', 'HSTECH'],
+    },
+}
 
 # 支持详情图的指数
 DETAIL_CODES = ['000300', '000016', '000905', '000852']
@@ -52,33 +61,40 @@ def _date_ctx() -> dict:
     en = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
     wd = today.weekday()
     return {
-        'date_mmdd':    today.strftime('%m.%d'),
+        'date_mmdd':    today.strftime('%Y.%m.%d'),
         'date_weekday': f'{en[wd]} · {cn[wd]}',
     }
 
 
 async def _query_summary(session) -> list[dict]:
+    """返回按市场分组的数据: [{label, indices: [...]}, ...]"""
+    all_codes = [c for g in SUMMARY_GROUPS.values() for c in g['codes']]
+
     rows = (await session.execute(
         select(Index, IndexStats)
         .join(IndexStats, Index.code == IndexStats.index_code)
-        .where(Index.code.in_(SUMMARY_CODES))
+        .where(Index.code.in_(all_codes), Index.is_active == True)  # noqa: E712
     )).all()
 
     stats_map = {idx.code: (idx, s) for idx, s in rows}
-    result = []
-    for code in SUMMARY_CODES:
-        if code not in stats_map:
-            continue
-        idx, s = stats_map[code]
-        result.append({
-            'name': idx.name,
-            'code': code,
-            'pe':  round(s.pe_percentile)  if s.pe_percentile  is not None else None,
-            'ps':  round(s.ps_percentile)  if s.ps_percentile  is not None else None,
-            'pb':  round(s.pb_percentile)  if s.pb_percentile  is not None else None,
-            'div': round(s.dyr_percentile) if s.dyr_percentile is not None else None,
-        })
-    return result
+    groups = []
+    for group_info in SUMMARY_GROUPS.values():
+        items = []
+        for code in group_info['codes']:
+            if code not in stats_map:
+                continue
+            idx, s = stats_map[code]
+            items.append({
+                'name': idx.name,
+                'code': code,
+                'pe':  round(s.pe_percentile)  if s.pe_percentile  is not None else None,
+                'ps':  round(s.ps_percentile)  if s.ps_percentile  is not None else None,
+                'pb':  round(s.pb_percentile)  if s.pb_percentile  is not None else None,
+                'div': round(s.dyr_percentile) if s.dyr_percentile is not None else None,
+            })
+        if items:
+            groups.append({'label': group_info['label'], 'indices': items})
+    return groups
 
 
 async def _query_detail(session, code: str) -> dict:
@@ -145,7 +161,7 @@ async def _query_detail(session, code: str) -> dict:
     }
 
 
-async def _screenshot(html: str, output_path: Path):
+async def _screenshot(html: str, output_path: Path, width: int = 1080, height: int = 1440):
     with tempfile.NamedTemporaryFile(
         suffix='.html', delete=False, mode='w', encoding='utf-8'
     ) as f:
@@ -154,7 +170,7 @@ async def _screenshot(html: str, output_path: Path):
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch()
-            page = await browser.new_page(viewport={'width': 1080, 'height': 1440})
+            page = await browser.new_page(viewport={'width': width, 'height': height}, device_scale_factor=2)
             await page.goto(f'file://{tmp}')
             await page.wait_for_load_state('networkidle')
             canvas = page.locator('#canvas')
@@ -172,14 +188,14 @@ def _render(template_name: str, ctx: dict) -> str:
 
 async def generate_summary():
     async with AsyncSessionLocal() as session:
-        indices = await _query_summary(session)
+        groups = await _query_summary(session)
 
     html = _render('daily_summary.html', {
         **_date_ctx(),
-        'indices_json': json.dumps(indices, ensure_ascii=False),
+        'groups_json': json.dumps(groups, ensure_ascii=False),
     })
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    await _screenshot(html, OUTPUT_DIR / f'summary_{date.today():%Y%m%d}.png')
+    await _screenshot(html, OUTPUT_DIR / f'summary_{date.today():%Y%m%d}.png', width=380, height=820)
 
 
 async def generate_detail(code: str):

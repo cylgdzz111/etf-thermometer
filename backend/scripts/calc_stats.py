@@ -42,7 +42,9 @@ def _calc_metric(values: np.ndarray, current: float | None):
 
 async def calc_all():
     async with AsyncSessionLocal() as session:
-        indices = (await session.execute(select(Index))).scalars().all()
+        indices = (await session.execute(
+            select(Index).where(Index.is_active == True)  # noqa: E712
+        )).scalars().all()
         logger.info('共 %d 个指数需要计算', len(indices))
         for idx in indices:
             await _calc_one(session, idx.code)

@@ -81,7 +81,7 @@ async def list_indices(
     q: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
-    stmt = select(Index).where(Index.market == market)
+    stmt = select(Index).where(Index.market == market, Index.is_active == True)  # noqa: E712
     if sector:
         stmt = stmt.where(Index.sector == sector)
     if q:

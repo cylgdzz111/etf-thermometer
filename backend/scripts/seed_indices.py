@@ -1,72 +1,73 @@
 """
-初始化 A 股指数主数据（20 个，来自设计稿）
+手动初始化指定指数并激活（is_active=True）
+适合在 sync_indices 同步完元数据后，批量激活已知想跟踪的指数。
+
 用法：python -m scripts.seed_indices
 """
 import asyncio
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from sqlalchemy import select
-from app.core.database import AsyncSessionLocal
+from app.core.database import AsyncSessionLocal, engine
 from app.models.index import Index
 
-# A 股指数列表
-# (code, name, sector, akshare_name)
-# akshare_name: index_value_hist_funddb 接口使用的中文名称，None 表示暂无 PE/PB 数据
-CN_INDICES = [
-    # 宽基
-    ('000300', '沪深300',    '宽基', '沪深300'),
-    ('000905', '中证500',    '宽基', '中证500'),
-    ('000852', '中证1000',   '宽基', '中证1000'),
-    ('399006', '创业板指',   '宽基', '创业板指'),
-    ('000016', '上证50',     '宽基', '上证50'),
-    ('000688', '科创50',     '宽基', '科创50'),
-    # 消费 / 医药 / 金融
-    ('399987', '中证酒',     '消费', '中证酒'),
-    ('000978', '医药100',    '医药', '医药100'),
-    ('399986', '中证银行',   '金融', '中证银行'),
-    ('399975', '证券公司',   '金融', '证券公司'),
-    # 新能源
-    ('399976', '新能源车',   '新能源', '新能源车'),
-    ('931151', '光伏产业',   '新能源', '光伏产业'),
-    # 军工 / 科技
-    ('931594', '卫星产业',   '军工', None),   # akshare 暂无
-    ('931066', '军工龙头',   '军工', None),
-    ('931521', '高端装备50', '军工', None),
-    ('931866', '中证机床',   '装备', None),
-    ('h30590', '机器人',     '机器人', None),
-    ('930875', '空天军工',   '军工', None),
-    ('399973', '中证国防',   '军工', '中证国防'),
-    ('399967', '中证军工',   '军工', '中证军工'),
+# 需要激活的指数：(code, market, name, sector)
+# 运行 sync_indices 后这些指数已存在于 indices 表，这里只做激活 + 补充 sector
+ACTIVE_INDICES = [
+    # ── A 股宽基 ──────────────────────────────────────────────────
+    ('000300', 'cn', '沪深300',    '宽基'),
+    ('000905', 'cn', '中证500',    '宽基'),
+    ('000852', 'cn', '中证1000',   '宽基'),
+    ('399006', 'cn', '创业板指',   '宽基'),
+    ('000016', 'cn', '上证50',     '宽基'),
+    ('000688', 'cn', '科创50',     '宽基'),
+    # ── A 股行业 ──────────────────────────────────────────────────
+    ('399987', 'cn', '中证酒',     '消费'),
+    ('000978', 'cn', '医药100',    '医药'),
+    ('399986', 'cn', '中证银行',   '金融'),
+    ('399975', 'cn', '证券公司',   '金融'),
+    ('399976', 'cn', '新能源车',   '新能源'),
+    ('931151', 'cn', '光伏产业',   '新能源'),
+    ('931594', 'cn', '卫星产业',   '军工'),
+    ('931066', 'cn', '军工龙头',   '军工'),
+    ('931521', 'cn', '高端装备50', '军工'),
+    ('931866', 'cn', '中证机床',   '装备'),
+    ('h30590', 'cn', '机器人',     '机器人'),
+    ('930875', 'cn', '空天军工',   '军工'),
+    ('399973', 'cn', '中证国防',   '军工'),
+    ('399967', 'cn', '中证军工',   '军工'),
+    # ── 港股 ──────────────────────────────────────────────────────
+    ('HSI',    'hk', '恒生指数',   '宽基'),
+    ('HSTECH', 'hk', '恒生科技',   '科技'),
 ]
 
 
 async def seed():
     async with AsyncSessionLocal() as session:
-        inserted, skipped = 0, 0
-        for code, name, sector, akshare_name in CN_INDICES:
+        activated = inserted = skipped = 0
+
+        for code, market, name, sector in ACTIVE_INDICES:
             existing = await session.get(Index, code)
             if existing:
-                skipped += 1
-                continue
-            session.add(Index(
-                code=code,
-                market='cn',
-                name=name,
-                sector=sector,
-                akshare_name=akshare_name,
-            ))
-            inserted += 1
+                # 已存在：激活并补充 sector（不覆盖其他字段）
+                existing.is_active = True
+                if not existing.sector:
+                    existing.sector = sector
+                activated += 1
+            else:
+                # 不存在时直接插入（兼容未运行 sync_indices 的情况）
+                session.add(Index(
+                    code=code, market=market,
+                    name=name, sector=sector,
+                    is_active=True,
+                ))
+                inserted += 1
+
         await session.commit()
-        print(f'Done: {inserted} inserted, {skipped} skipped')
+        print(f'Done: activated={activated}, inserted={inserted}, skipped={skipped}')
 
-
-async def main():
-    await seed()
-    # 确保连接池在 event loop 关闭前释放
-    from app.core.database import engine
     await engine.dispose()
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    asyncio.run(seed())

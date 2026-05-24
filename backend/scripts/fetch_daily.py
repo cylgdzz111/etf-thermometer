@@ -95,7 +95,9 @@ async def run_daily():
     """增量更新：从每个指数的最新日期起抓取"""
     logger.info('=== 开始每日增量更新 ===')
     async with AsyncSessionLocal() as session:
-        indices = (await session.execute(select(Index))).scalars().all()
+        indices = (await session.execute(
+            select(Index).where(Index.is_active == True)  # noqa: E712
+        )).scalars().all()
 
     total_inserted = 0
     for idx in indices:
@@ -127,7 +129,9 @@ async def run_backfill():
     start_date = date(date.today().year - BACKFILL_YEARS, 1, 1)
 
     async with AsyncSessionLocal() as session:
-        indices = (await session.execute(select(Index))).scalars().all()
+        indices = (await session.execute(
+            select(Index).where(Index.is_active == True)  # noqa: E712
+        )).scalars().all()
 
     for idx in indices:
         logger.info('回填 %s %s', idx.code, idx.name)
@@ -146,7 +150,9 @@ async def run_fix_pe():
     start_date = date(date.today().year - BACKFILL_YEARS, 1, 1)
 
     async with AsyncSessionLocal() as session:
-        indices = (await session.execute(select(Index))).scalars().all()
+        indices = (await session.execute(
+            select(Index).where(Index.is_active == True)  # noqa: E712
+        )).scalars().all()
 
     for idx in indices:
         logger.info('修复 PE/PB: %s %s', idx.code, idx.name)
@@ -159,8 +165,8 @@ async def run_fix_pe():
 
 async def _apply_lixinger_records(records: list) -> int:
     """将一批理杏仁 DailyMetrics 写入 daily_metrics。
-    - pe/pb：只填充原为 NULL 的行（保留 akshare 已有数据）
-    - ps/dyr：lixinger 独有，有值则直接覆写
+    - 行不存在且有收盘价（cp）：直接插入（用于港股等 akshare 无法抓取的指数）
+    - 行已存在：pe/pb 只填充 NULL，ps/dyr 有值则覆写
     """
     async with AsyncSessionLocal() as session:
         updated = 0
@@ -173,6 +179,19 @@ async def _apply_lixinger_records(records: list) -> int:
             )).scalar_one_or_none()
 
             if not existing:
+                # akshare 无数据的指数（如港股），用理杏仁数据直接建行
+                if r.close is not None:
+                    session.add(DailyMetricsModel(
+                        index_code=r.index_code,
+                        date=r.date,
+                        close=r.close,
+                        pe=r.pe,
+                        pb=r.pb,
+                        ps=r.ps,
+                        dyr=r.dyr,
+                        source='lixinger',
+                    ))
+                    updated += 1
                 continue
 
             changed = False
@@ -206,17 +225,26 @@ async def run_lixinger_enrich(is_backfill: bool = False, codes: list[str] | None
 
     logger.info('=== 开始理杏仁 PE/PB 增强（%s）===', '历史回填' if is_backfill else '每日增量')
 
+    # 理杏仁支持 cn / hk 两个市场
+    SUPPORTED_MARKETS = ('cn', 'hk')
+
     if codes:
-        # 使用指定的指数列表
+        # 使用指定的指数列表（指定时不限 is_active，方便单独回填）
         async with AsyncSessionLocal() as session:
             indices = (await session.execute(
-                select(Index).where(Index.market == 'cn', Index.code.in_(codes))
+                select(Index).where(
+                    Index.market.in_(SUPPORTED_MARKETS),
+                    Index.code.in_(codes),
+                )
             )).scalars().all()
         logger.info('指定指数：%s', ', '.join(codes))
     else:
         async with AsyncSessionLocal() as session:
             indices = (await session.execute(
-                select(Index).where(Index.market == 'cn')
+                select(Index).where(
+                    Index.market.in_(SUPPORTED_MARKETS),
+                    Index.is_active == True,  # noqa: E712
+                )
             )).scalars().all()
 
     lixinger = LixingerProvider()
@@ -235,10 +263,10 @@ async def run_lixinger_enrich(is_backfill: bool = False, codes: list[str] | None
             updated = await _apply_lixinger_records(records)
             logger.info('%s: 理杏仁更新 %d 条 PE/PB', idx.code, updated)
     else:
-        # 批量获取最新一条，最多 100 个 code 一次
-        batch_codes = [idx.code for idx in indices]
+        # 批量获取最新一条，按市场分组（cn/hk 各自调用对应端点）
+        code_market_pairs = [(idx.code, idx.market) for idx in indices]
         try:
-            records = lixinger.get_latest_batch(batch_codes)
+            records = lixinger.get_latest_batch(code_market_pairs)
         except DataFetchError as e:
             logger.warning('理杏仁批量增强失败: %s', e)
             return
