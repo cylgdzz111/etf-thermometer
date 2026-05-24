@@ -74,15 +74,13 @@ async def _calc_one(session, code: str):
     ps_pct,  ps_min,  ps_max,  ps_avg  = _calc_metric(ps_vals,  float(latest.ps)  if latest.ps  is not None else None)
     dyr_pct, dyr_min, dyr_max, dyr_avg = _calc_metric(dyr_vals, float(latest.dyr) if latest.dyr is not None else None)
 
-    temperature = (pe_pct + pb_pct) / 2 if (pe_pct is not None and pb_pct is not None) else None
-
     existing = await session.get(IndexStats, code)
     fields = dict(
         pe_percentile=pe_pct,   pe_min=pe_min,   pe_max=pe_max,   pe_avg=pe_avg,
         pb_percentile=pb_pct,   pb_min=pb_min,   pb_max=pb_max,   pb_avg=pb_avg,
         ps_percentile=ps_pct,   ps_min=ps_min,   ps_max=ps_max,   ps_avg=ps_avg,
         dyr_percentile=dyr_pct, dyr_min=dyr_min, dyr_max=dyr_max, dyr_avg=dyr_avg,
-        temperature=temperature,
+        data_date=latest.date,
         updated_at=datetime.now(),
     )
 

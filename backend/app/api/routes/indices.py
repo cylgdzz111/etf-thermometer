@@ -38,6 +38,16 @@ def _f1(v) -> float | None:
     return round(float(v), 1) if v is not None else None
 
 
+def _temperature(s) -> float | None:
+    """PE/PB 分位均值，作为综合温度；temperature 字段已从 index_stats 移除。"""
+    if s is None:
+        return None
+    pe, pb = s.pe_percentile, s.pb_percentile
+    if pe is not None and pb is not None:
+        return round((float(pe) + float(pb)) / 2, 1)
+    return None
+
+
 def _range_stats(series: list[float | None], current: float | None) -> RangeStats:
     """从当前区间的时间序列计算 p30/p50/p80 及最新值的区间分位。"""
     vals = np.array([v for v in series if v is not None], dtype=float)
@@ -131,7 +141,7 @@ async def list_indices(
             pep=_f1(s.pe_percentile if s else None),
             pb=_f4(dm.pb if dm else None),
             pbp=_f1(s.pb_percentile if s else None),
-            temperature=_f1(s.temperature if s else None),
+            temperature=_temperature(s),
             sparkline=spark_map.get(code, []),
         ))
 
@@ -186,7 +196,7 @@ async def get_index_detail(code: str, db: AsyncSession = Depends(get_db)):
         pep=_f1(s.pe_percentile if s else None),
         pb=_f4(dm.pb if dm else None),
         pbp=_f1(s.pb_percentile if s else None),
-        temperature=_f1(s.temperature if s else None),
+        temperature=_temperature(s),
         sparkline=[],
         pe_min=_f2(s.pe_min if s else None),
         pe_max=_f2(s.pe_max if s else None),

@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     TUSHARE_TOKEN: str = ''
     LIXINGER_TOKEN: str = ''
 
+    # 日志配置
+    LOG_LEVEL: str = 'INFO'    # DEBUG / INFO / WARNING / ERROR
+    LOG_DIR:   str = 'logs'    # 日志文件目录；空字符串则只输出 stdout
+    LOG_JSON:  bool = False    # True → JSON 格式（生产推荐）；False → 人读文本格式
+
     @property
     def db_url_async(self) -> str:
         """aiomysql 异步驱动，用于 FastAPI 运行时"""

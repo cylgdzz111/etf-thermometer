@@ -1,4 +1,5 @@
-from sqlalchemy import String, Numeric, DateTime
+from datetime import date
+from sqlalchemy import String, Numeric, DateTime, Date
 from sqlalchemy.orm import Mapped, mapped_column
 from ..core.database import Base
 
@@ -32,5 +33,6 @@ class IndexStats(Base):
     dyr_max:        Mapped[float | None] = mapped_column(Numeric(10, 6))
     dyr_avg:        Mapped[float | None] = mapped_column(Numeric(10, 6))
 
-    temperature:   Mapped[float | None] = mapped_column(Numeric(5, 2))
+    # 分位数对应的交易日（daily_metrics 最新一行的 date）
+    data_date:     Mapped[date | None] = mapped_column(Date)
     updated_at:    Mapped[DateTime | None] = mapped_column(DateTime)

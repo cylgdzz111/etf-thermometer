@@ -21,6 +21,11 @@ services:
       - DB_NAME=${DB_NAME:-etf_thermometer}
       - DB_ECHO=false
       - LIXINGER_TOKEN=${LIXINGER_TOKEN:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_DIR=/app/logs
+      - LOG_JSON=true
+    volumes:
+      - ./logs:/app/logs
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

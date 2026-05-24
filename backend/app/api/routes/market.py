@@ -33,6 +33,16 @@ def _f1(v) -> float | None:
     return round(float(v), 1) if v is not None else None
 
 
+def _temperature(s) -> float | None:
+    """PE/PB 分位均值，作为综合温度；temperature 字段已从 index_stats 移除。"""
+    if s is None:
+        return None
+    pe, pb = s.pe_percentile, s.pb_percentile
+    if pe is not None and pb is not None:
+        return round((float(pe) + float(pb)) / 2, 1)
+    return None
+
+
 @router.get('/market/{market}/overview', response_model=ApiResponse[MarketOverviewSchema])
 async def get_market_overview(market: str, db: AsyncSession = Depends(get_db)):
     empty = ApiResponse(data=MarketOverviewSchema(
@@ -76,8 +86,9 @@ async def get_market_overview(market: str, db: AsyncSession = Depends(get_db)):
         )).scalars().all()
     }
 
-    # 市场平均温度
-    temps = [float(s.temperature) for s in stats_map.values() if s.temperature is not None]
+    # 市场平均温度（PE/PB 分位均值）
+    temps = [_temperature(s) for s in stats_map.values()]
+    temps = [t for t in temps if t is not None]
     temperature = _f1(sum(temps) / len(temps)) if temps else None
 
     # 最新数据日期
@@ -99,7 +110,7 @@ async def get_market_overview(market: str, db: AsyncSession = Depends(get_db)):
             pep=_f1(s.pe_percentile if s else None),
             pb=_f4(dm.pb if dm else None),
             pbp=_f1(s.pb_percentile if s else None),
-            temperature=_f1(s.temperature if s else None),
+            temperature=_temperature(s),
         ))
 
     # 5. 行业热力图
