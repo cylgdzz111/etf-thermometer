@@ -106,6 +106,42 @@ async def _apply_lixinger_records(records: list) -> int:
     return updated
 
 
+async def _get_outdated_indices(indices: list) -> list:
+    """返回需要更新的指数：latest pe 日期落后于当前最新交易日的。
+
+    以已有数据中最新的那天为"参照日期"，自动适配工作日/非交易日：
+    - 工作日重跑：第一批已更新的指数将参照日期推到今天，剩余未更新的被返回
+    - 非交易日重跑：参照日期 = 上一个交易日，已有该日数据的全部跳过
+    """
+    if not indices:
+        return []
+    codes = [idx.code for idx in indices]
+    async with AsyncSessionLocal() as session:
+        rows = (await session.execute(
+            select(DailyMetricsModel.index_code,
+                   func.max(DailyMetricsModel.date).label('latest'))
+            .where(DailyMetricsModel.index_code.in_(codes),
+                   DailyMetricsModel.pe.isnot(None))
+            .group_by(DailyMetricsModel.index_code)
+        )).all()
+    latest_map = {r.index_code: r.latest for r in rows}
+
+    all_dates = [d for d in latest_map.values() if d]
+    ref_date = max(all_dates) if all_dates else None
+
+    need, skip = [], []
+    for idx in indices:
+        d = latest_map.get(idx.code)
+        if ref_date and d and d >= ref_date:
+            skip.append(idx.code)
+        else:
+            need.append(idx)
+
+    if skip:
+        logger.info('参照日期 %s，已是最新跳过 %d 个：%s', ref_date, len(skip), ', '.join(skip))
+    return need
+
+
 async def run_lixinger_enrich(is_backfill: bool = False, codes: list[str] | None = None):
     """用理杏仁数据补充 daily_metrics 中缺失的 PE/PB（仅 cn 市场）
 
@@ -157,8 +193,15 @@ async def run_lixinger_enrich(is_backfill: bool = False, codes: list[str] | None
             updated = await _apply_lixinger_records(records)
             logger.info('%s: 理杏仁更新 %d 条 PE/PB', idx.code, updated)
     else:
-        # 批量获取最新一条，按市场分组（cn/hk 各自调用对应端点）
+        # 批量获取最新一条：先过滤已有最新数据的指数，避免重跑浪费 API 调用
+        total = len(indices)
+        indices = await _get_outdated_indices(list(indices))
+        if not indices:
+            logger.info('所有 %d 个指数已是最新，跳过理杏仁请求', total)
+            return
+
         code_market_pairs = [(idx.code, idx.market) for idx in indices]
+        logger.info('共 %d 个指数需要更新（已跳过 %d 个）', len(indices), total - len(indices))
         try:
             records = lixinger.get_latest_batch(code_market_pairs)
         except DataFetchError as e:
