@@ -20,7 +20,7 @@ from app.core.database import AsyncSessionLocal, engine
 from app.core.config import settings
 from app.models.index import Index
 from app.models.daily_metrics import DailyMetrics as DailyMetricsModel
-from providers.composite import CompositeProvider
+# from providers.composite import CompositeProvider  # akshare 暂时停用
 from providers.lixinger_provider import LixingerProvider
 from providers.base import DataFetchError
 from scripts.calc_stats import calc_all
@@ -31,135 +31,29 @@ logging.basicConfig(
 )
 logger = logging.getLogger('fetch_daily')
 
-provider = CompositeProvider()
-
-# 历史回填起始年数
-BACKFILL_YEARS = 11
+# provider = CompositeProvider()  # akshare 暂时停用
 
 
-async def fetch_index(code: str, market: str, start_date: date, update_pe: bool = False):
-    """抓取单个指数从 start_date 至今的数据。
-    update_pe=True 时只补充已有记录中 pe/pb 为 NULL 的字段，不插入新行。
-    """
-    try:
-        records = provider.get_history(code, market, start_date)
-    except Exception as e:
-        logger.error('抓取失败 %s: %s', code, e)
-        return 0
-
-    if not records:
-        return 0
-
-    async with AsyncSessionLocal() as session:
-        affected = 0
-        for r in records:
-            existing = (await session.execute(
-                select(DailyMetricsModel)
-                .where(DailyMetricsModel.index_code == r.index_code,
-                       DailyMetricsModel.date == r.date)
-                .limit(1)
-            )).scalar_one_or_none()
-
-            if existing:
-                if update_pe and r.pe is not None and existing.pe is None:
-                    existing.pe = r.pe
-                    existing.pb = r.pb
-                    affected += 1
-            else:
-                session.add(DailyMetricsModel(
-                    index_code=r.index_code,
-                    date=r.date,
-                    close=r.close,
-                    pe=r.pe,
-                    pb=r.pb,
-                    ps=r.ps,
-                    dyr=r.dyr,
-                    source=r.source,
-                ))
-                affected += 1
-        await session.commit()
-    return affected
-
-
-async def get_latest_date(code: str) -> date | None:
-    """查询该指数在 daily_metrics 中最新的数据日期"""
-    async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            select(func.max(DailyMetricsModel.date))
-            .where(DailyMetricsModel.index_code == code)
-        )
-        return result.scalar_one_or_none()
+# ── akshare 相关函数暂时停用，恢复时取消注释并重新启用 CompositeProvider ──────
+# async def fetch_index(code, market, start_date, update_pe=False): ...
+# async def get_latest_date(code): ...
+# async def run_fix_pe(): ...
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 async def run_daily():
-    """增量更新：从每个指数的最新日期起抓取"""
+    """每日增量更新：通过理杏仁批量拉取最新一条数据"""
     logger.info('=== 开始每日增量更新 ===')
-    async with AsyncSessionLocal() as session:
-        indices = (await session.execute(
-            select(Index).where(Index.is_active == True)  # noqa: E712
-        )).scalars().all()
-
-    total_inserted = 0
-    for idx in indices:
-        latest = await get_latest_date(idx.code)
-        # 如果有历史数据，从最新日期的次日开始；否则只取近 30 天（等待 backfill）
-        if latest:
-            start = latest + timedelta(days=1)
-        else:
-            start = date.today() - timedelta(days=30)
-
-        if start > date.today():
-            logger.info('%s: 已是最新，跳过', idx.code)
-            continue
-
-        n = await fetch_index(idx.code, idx.market, start)
-        logger.info('%s: 新增 %d 条', idx.code, n)
-        total_inserted += n
-
-    logger.info('=== 增量更新完成，共新增 %d 条 ===', total_inserted)
-
     await run_lixinger_enrich()
     logger.info('=== 开始计算分位数 ===')
     await calc_all()
 
 
 async def run_backfill():
-    """历史回填：抓取全量历史数据"""
-    logger.info('=== 开始历史回填（近 %d 年）===', BACKFILL_YEARS)
-    start_date = date(date.today().year - BACKFILL_YEARS, 1, 1)
-
-    async with AsyncSessionLocal() as session:
-        indices = (await session.execute(
-            select(Index).where(Index.is_active == True)  # noqa: E712
-        )).scalars().all()
-
-    for idx in indices:
-        logger.info('回填 %s %s', idx.code, idx.name)
-        n = await fetch_index(idx.code, idx.market, start_date)
-        logger.info('%s: 新增 %d 条', idx.code, n)
-
-    logger.info('=== 历史回填完成 ===')
+    """历史回填：通过理杏仁逐个指数拉取近 10 年历史数据"""
+    logger.info('=== 开始历史回填（近 10 年）===')
     await run_lixinger_enrich(is_backfill=True)
     logger.info('=== 开始计算分位数 ===')
-    await calc_all()
-
-
-async def run_fix_pe():
-    """对已有价格数据但 PE/PB 为 NULL 的指数补充 PE/PB"""
-    logger.info('=== 开始 PE/PB 补充 ===')
-    start_date = date(date.today().year - BACKFILL_YEARS, 1, 1)
-
-    async with AsyncSessionLocal() as session:
-        indices = (await session.execute(
-            select(Index).where(Index.is_active == True)  # noqa: E712
-        )).scalars().all()
-
-    for idx in indices:
-        logger.info('修复 PE/PB: %s %s', idx.code, idx.name)
-        n = await fetch_index(idx.code, idx.market, start_date, update_pe=True)
-        logger.info('%s: 更新 %d 条', idx.code, n)
-
-    logger.info('=== PE/PB 补充完成，重算分位数 ===')
     await calc_all()
 
 
@@ -271,7 +165,7 @@ async def run_lixinger_enrich(is_backfill: bool = False, codes: list[str] | None
             logger.warning('理杏仁批量增强失败: %s', e)
             return
         updated = await _apply_lixinger_records(records)
-        logger.info('理杏仁批量更新 %d 条 PE/PB（%d 个指数）', updated, len(batch_codes))
+        logger.info('理杏仁批量更新 %d 条 PE/PB（%d 个指数）', updated, len(code_market_pairs))
 
     logger.info('=== 理杏仁 PE/PB 增强完成 ===')
 
@@ -367,8 +261,8 @@ async def main_async(mode: str, codes: list[str] | None = None):
     try:
         if mode == 'backfill':
             await run_backfill()
-        elif mode == 'fix_pe':
-            await run_fix_pe()
+        # elif mode == 'fix_pe':        # akshare 暂时停用
+        #     await run_fix_pe()
         elif mode == 'lixinger_enrich':
             await run_lixinger_enrich(is_backfill=True, codes=codes)
         elif mode == 'backfill_cache':
@@ -383,7 +277,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--now', action='store_true', help='立即执行一次后退出')
     parser.add_argument('--backfill', action='store_true', help='历史回填后退出')
-    parser.add_argument('--fix-pe', action='store_true', help='补充 PE/PB 为 NULL 的历史记录')
+    # parser.add_argument('--fix-pe', ...)  # akshare 暂时停用
     parser.add_argument('--lixinger-enrich', action='store_true', help='仅运行理杏仁 PE/PB 增强')
     parser.add_argument('--codes', nargs='+', metavar='CODE', help='指定指数代码，配合 --lixinger-enrich 使用')
     args = parser.parse_args()
@@ -392,9 +286,6 @@ def main():
         asyncio.run(main_async('backfill'))
         return
 
-    if args.fix_pe:
-        asyncio.run(main_async('fix_pe'))
-        return
 
     if args.lixinger_enrich:
         asyncio.run(main_async('lixinger_enrich', codes=args.codes))
