@@ -41,9 +41,6 @@ SUMMARY_GROUPS = {
     },
 }
 
-# 支持详情图的指数
-DETAIL_CODES = ['000300', '000016', '000905', '000852']
-
 
 def _sig(pct: float | None) -> str:
     if pct is None:
@@ -226,9 +223,13 @@ async def main():
     if args.all:
         print('生成每日汇总...')
         await generate_summary()
-        for code in DETAIL_CODES:
-            print(f'生成详情 {code}...')
-            await generate_detail(code)
+        async with AsyncSessionLocal() as session:
+            active_indices = (await session.execute(
+                select(Index).where(Index.is_active == True)  # noqa: E712
+            )).scalars().all()
+        for idx in active_indices:
+            print(f'生成详情 {idx.code} {idx.name}...')
+            await generate_detail(idx.code)
     elif args.type == 'summary':
         await generate_summary()
     elif args.type == 'detail':

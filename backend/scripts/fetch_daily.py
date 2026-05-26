@@ -107,14 +107,17 @@ async def _apply_lixinger_records(records: list) -> int:
 
 
 async def _get_outdated_indices(indices: list) -> list:
-    """返回需要更新的指数：latest pe 日期落后于当前最新交易日的。
+    """返回需要更新的指数：尚未有今日 pe 数据的指数。
 
-    以已有数据中最新的那天为"参照日期"，自动适配工作日/非交易日：
-    - 工作日重跑：第一批已更新的指数将参照日期推到今天，剩余未更新的被返回
-    - 非交易日重跑：参照日期 = 上一个交易日，已有该日数据的全部跳过
+    以今天为参照：只跳过 latest pe 日期 >= today 的指数。
+    - 工作日首次运行：所有指数 latest < today → 全部请求
+    - 工作日重跑：已更新的指数 latest == today → 跳过；其余继续请求
+    - 非交易日重跑：所有指数 latest < today → 全部请求（Lixinger 返回上一交易日
+      数据，_apply_lixinger_records 对已有 pe 的行不做写入，仅消耗一次批量 API）
     """
     if not indices:
         return []
+    today = date.today()
     codes = [idx.code for idx in indices]
     async with AsyncSessionLocal() as session:
         rows = (await session.execute(
@@ -126,19 +129,16 @@ async def _get_outdated_indices(indices: list) -> list:
         )).all()
     latest_map = {r.index_code: r.latest for r in rows}
 
-    all_dates = [d for d in latest_map.values() if d]
-    ref_date = max(all_dates) if all_dates else None
-
     need, skip = [], []
     for idx in indices:
         d = latest_map.get(idx.code)
-        if ref_date and d and d >= ref_date:
+        if d and d >= today:
             skip.append(idx.code)
         else:
             need.append(idx)
 
     if skip:
-        logger.info('参照日期 %s，已是最新跳过 %d 个：%s', ref_date, len(skip), ', '.join(skip))
+        logger.info('已有今日数据，跳过 %d 个：%s', len(skip), ', '.join(skip))
     return need
 
 
