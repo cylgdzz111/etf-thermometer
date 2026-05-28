@@ -40,7 +40,7 @@ cd backend
 
 ```bash
 cd backend
-python -m scripts.fetch_daily --now
+.venv/bin/python -m scripts.fetch_daily --now
 ```
 
 - 批量请求当天所有指数的最新估值，每次最多 **100 个**指数

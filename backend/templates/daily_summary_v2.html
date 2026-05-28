@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700;800;900&family=Noto+Serif+SC:wght@900&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #060b14; padding: 20px; display: flex; gap: 24px; align-items: flex-start; }
+</style>
+</head>
+<body>
+
+<!-- ── 封面图 400×400 ────────────────────────────────────────────────────── -->
+<div id="cover-card" style="
+  width: 400px; height: 400px;
+  background: linear-gradient(135deg, #0a0e1a 0%, #0d1525 50%, #0a1020 100%);
+  border-radius: 20px; position: relative; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-family: 'Noto Serif SC', 'Noto Sans SC', 'PingFang SC', serif;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+  flex-shrink: 0;
+">
+  <!-- 背景网格 -->
+  <div style="
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(99,179,237,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(99,179,237,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+  "></div>
+  <!-- 中心光晕 -->
+  <div style="
+    position: absolute; width: 280px; height: 280px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(59,130,246,0.15) 0%, transparent 70%);
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+  "></div>
+  <!-- 顶部标签 -->
+  <div style="
+    position: absolute; top: 28px; left: 28px;
+    background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3);
+    border-radius: 6px; padding: 3px 10px;
+    font-size: 11px; color: #93c5fd; letter-spacing: 2px;
+    font-family: 'Noto Sans SC', sans-serif;
+  ">DAILY VALUATION</div>
+  <!-- 日期 -->
+  <div style="font-size: 13px; color: rgba(255,255,255,0.4); letter-spacing: 3px; margin-bottom: 16px;">
+    {{ date_str }}
+  </div>
+  <!-- 主标题 -->
+  <div style="
+    font-size: 38px; font-weight: 900; color: #fff;
+    letter-spacing: 4px; text-align: center; line-height: 1.2; margin-bottom: 8px;
+  ">指数估值</div>
+  <div style="
+    font-size: 38px; font-weight: 900; letter-spacing: 4px;
+    text-align: center; line-height: 1.2;
+    background: linear-gradient(90deg, #60a5fa, #a78bfa);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  ">全景速览</div>
+  <!-- 副标题 -->
+  <div style="
+    margin-top: 24px; font-size: 13px; color: rgba(255,255,255,0.35);
+    letter-spacing: 2px; text-align: center;
+    font-family: 'Noto Sans SC', sans-serif;
+  ">PE · PB · 股息率 · 历史分位</div>
+  <!-- 底部品牌 -->
+  <div style="position: absolute; bottom: 24px; display: flex; align-items: center; gap: 8px; font-family: 'Noto Sans SC', sans-serif;">
+    <div style="
+      width: 28px; height: 28px; border-radius: 50%;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+    ">📊</div>
+    <span style="font-size: 13px; color: rgba(255,255,255,0.5); letter-spacing: 1px;">长期主义格子衫</span>
+  </div>
+</div>
+
+<!-- ── 估值一览图 400×auto ───────────────────────────────────────────────── -->
+<div id="valuation-card" style="
+  width: 400px;
+  background: #0a0e1a;
+  border-radius: 20px; overflow: hidden;
+  font-family: 'Noto Sans SC', 'PingFang SC', sans-serif;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+  flex-shrink: 0;
+">
+  <!-- 卡片头部 -->
+  <div style="
+    background: linear-gradient(135deg, #0d1525, #111827);
+    padding: 20px 22px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  ">
+    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+      <div>
+        <div style="font-size: 18px; font-weight: 800; color: #fff; letter-spacing: 2px;">指数估值一览</div>
+        <div style="font-size: 11px; color: rgba(255,255,255,0.35); margin-top: 4px; letter-spacing: 1px;">
+          {{ date_str }} · 长期主义格子衫
+        </div>
+      </div>
+    </div>
+    <!-- 列标题 -->
+    <div style="
+      display: grid;
+      grid-template-columns: 76px 48px 44px 40px 50px 50px 48px;
+      margin-top: 14px;
+    ">
+      <div style="font-size: 10px; color: rgba(255,255,255,0.3); text-align: left;">指数</div>
+      <div style="text-align: center;">
+        <div style="font-size: 10px; color: rgba(255,255,255,0.3);">PE</div>
+        <div style="font-size: 9px; color: rgba(255,255,255,0.2); margin-top: 1px;">市盈率</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 10px; color: rgba(255,255,255,0.3);">PB</div>
+        <div style="font-size: 9px; color: rgba(255,255,255,0.2); margin-top: 1px;">市净率</div>
+      </div>
+      <div style="font-size: 10px; color: rgba(255,255,255,0.3); text-align: center;">股息率</div>
+      <div style="text-align: center;">
+        <div style="font-size: 10px; color: rgba(255,255,255,0.3);">PE10年</div>
+        <div style="font-size: 9px; color: rgba(255,255,255,0.2); margin-top: 1px;">分位</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 10px; color: rgba(255,255,255,0.3);">PB10年</div>
+        <div style="font-size: 9px; color: rgba(255,255,255,0.2); margin-top: 1px;">分位</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 10px; color: rgba(255,255,255,0.3);">PS10年</div>
+        <div style="font-size: 9px; color: rgba(255,255,255,0.2); margin-top: 1px;">分位</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 数据行（由 JS 动态填充）-->
+  <div id="rows-container" style="padding: 4px 0 8px;"></div>
+
+  <!-- 底部说明 -->
+  <div style="
+    padding: 10px 22px 16px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    font-size: 10px; color: rgba(255,255,255,0.2); line-height: 1.6; letter-spacing: 0.5px;
+  ">数据仅供参考，不构成投资建议</div>
+</div>
+
+<script>
+const indices = {{ indices_json }};
+
+function getLevel(pct) {
+  if (pct === null || pct === undefined) {
+    return { label: '—', color: 'rgba(255,255,255,0.25)', bg: 'rgba(255,255,255,0.04)' };
+  }
+  if (pct <= 30) return { label: '低估', color: '#4ade80', bg: 'rgba(74,222,128,0.12)' };
+  if (pct <= 70) return { label: '合理', color: '#fbbf24', bg: 'rgba(251,191,36,0.12)' };
+  return { label: '偏高', color: '#f87171', bg: 'rgba(248,113,113,0.12)' };
+}
+
+function pctValueHtml(value) {
+  if (value === null || value === undefined) {
+    return '<span style="font-size:12px;color:rgba(255,255,255,0.25);">—</span>';
+  }
+  const level = getLevel(value);
+  return `<span style="font-size:12px;color:${level.color};font-weight:700;">${value}%</span>`;
+}
+
+const container = document.getElementById('rows-container');
+indices.forEach(function(row, idx) {
+  const rowBg = idx % 2 === 0 ? 'rgba(255,255,255,0.015)' : 'transparent';
+  const pe  = row.pe  !== null && row.pe  !== undefined ? row.pe  : '—';
+  const pb  = row.pb  !== null && row.pb  !== undefined ? row.pb  : '—';
+  const div = row.div !== null && row.div !== undefined ? row.div + '%' : '—';
+
+  container.innerHTML += `<div style="
+    display:grid;
+    grid-template-columns:76px 48px 44px 40px 50px 50px 48px;
+    align-items:center;
+    padding:9px 22px;
+    background:${rowBg};
+    border-bottom:1px solid rgba(255,255,255,0.03);
+  ">
+    <div style="font-size:13px;font-weight:700;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${row.name}</div>
+    <div style="font-size:12px;font-weight:700;color:#e2e8f0;text-align:center;">${pe}</div>
+    <div style="font-size:12px;font-weight:700;color:#e2e8f0;text-align:center;">${pb}</div>
+    <div style="font-size:12px;color:#94a3b8;text-align:center;">${div}</div>
+    <div style="text-align:center;">${pctValueHtml(row.pe10y)}</div>
+    <div style="text-align:center;">${pctValueHtml(row.pb10y)}</div>
+    <div style="text-align:center;">${pctValueHtml(row.ps10y)}</div>
+  </div>`;
+});
+</script>
+</body>
+</html>

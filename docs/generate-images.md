@@ -110,3 +110,6 @@ DETAIL_CODES = ['000300', '000016', '000905', '000852']
 ```bash
 .venv/bin/python -m scripts.fetch_daily
 ```
+
+
+.venv/bin/python -m scripts.generate_images --v2

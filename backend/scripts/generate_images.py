@@ -19,12 +19,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import numpy as np
 from jinja2 import Environment, FileSystemLoader
 from playwright.async_api import async_playwright
-from sqlalchemy import select
+from sqlalchemy import select, func, and_
 
 from app.core.database import AsyncSessionLocal
 from app.models.index import Index
 from app.models.daily_metrics import DailyMetrics
 from app.models.index_stats import IndexStats
+from app.models.lixinger_fundamental import LixingerFundamental
 
 TEMPLATES_DIR = Path(__file__).parent.parent / 'templates'
 OUTPUT_DIR    = Path(__file__).parent.parent.parent / 'output'
@@ -33,13 +34,17 @@ OUTPUT_DIR    = Path(__file__).parent.parent.parent / 'output'
 SUMMARY_GROUPS = {
     'cn': {
         'label': 'A股',
-        'codes': ['000300', '000016', '000905', '000852', '399006', '000688', '000922'],
+        'codes': ['000300', '000016', '000905', '000852', '399006', '000688', '000922','H30269','000932'],
     },
     'hk': {
         'label': '港股',
         'codes': ['HSI', 'HSTECH'],
     },
 }
+
+
+# 支持详情图的指数
+DETAIL_CODES = ['000300', '000016', '000510', '000906','399006', 'H30269' , '000932','HSI','HSTECH']
 
 
 def _sig(pct: float | None) -> str:
@@ -183,6 +188,79 @@ def _render(template_name: str, ctx: dict) -> str:
     return env.get_template(template_name).render(**ctx)
 
 
+async def _query_summary_v2(session) -> list[dict]:
+    """返回 v2 所需的指数数据列表（含 5 年分位数）"""
+    all_codes = [c for g in SUMMARY_GROUPS.values() for c in g['codes']]
+
+    # Index + IndexStats（10 年分位数）
+    rows = (await session.execute(
+        select(Index, IndexStats)
+        .join(IndexStats, Index.code == IndexStats.index_code)
+        .where(Index.code.in_(all_codes), Index.is_active == True)  # noqa: E712
+    )).all()
+    stats_map = {idx.code: (idx, s) for idx, s in rows}
+
+    # 最新 DailyMetrics（PE/PB/DYR 当前值）
+    latest_subq = (
+        select(DailyMetrics.index_code, func.max(DailyMetrics.date).label('max_date'))
+        .where(DailyMetrics.index_code.in_(all_codes))
+        .group_by(DailyMetrics.index_code)
+        .subquery()
+    )
+    dm_map = {
+        r.index_code: r
+        for r in (await session.execute(
+            select(DailyMetrics).join(latest_subq, and_(
+                DailyMetrics.index_code == latest_subq.c.index_code,
+                DailyMetrics.date == latest_subq.c.max_date,
+            ))
+        )).scalars().all()
+    }
+
+    result = []
+    for group_info in SUMMARY_GROUPS.values():
+        for code in group_info['codes']:
+            if code not in stats_map:
+                continue
+            idx, s = stats_map[code]
+            dm = dm_map.get(code)
+            result.append({
+                'name':  idx.name,
+                'pe':    round(float(dm.pe),  1) if dm and dm.pe   is not None else None,
+                'pb':    round(float(dm.pb),  2) if dm and dm.pb   is not None else None,
+                'div':   round(float(dm.dyr) * 100, 2) if dm and dm.dyr is not None else None,
+                'pe10y': round(float(s.pe_percentile)) if s.pe_percentile is not None else None,
+                'pb10y': round(float(s.pb_percentile)) if s.pb_percentile is not None else None,
+                'ps10y': round(float(s.ps_percentile)) if s.ps_percentile is not None else None,
+            })
+    return result
+
+
+async def _screenshot_elements(html: str, captures: list[tuple[str, Path]], page_width: int = 900):
+    """截取 HTML 页面中多个指定元素，分别保存为独立图片。"""
+    with tempfile.NamedTemporaryFile(
+        suffix='.html', delete=False, mode='w', encoding='utf-8'
+    ) as f:
+        f.write(html)
+        tmp = f.name
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
+            page = await browser.new_page(
+                viewport={'width': page_width, 'height': 1200},
+                device_scale_factor=2,
+            )
+            await page.goto(f'file://{tmp}')
+            await page.wait_for_load_state('networkidle')
+            for element_id, output_path in captures:
+                elem = page.locator(f'#{element_id}')
+                await elem.screenshot(path=str(output_path))
+                print(f'  saved → {output_path}')
+            await browser.close()
+    finally:
+        os.unlink(tmp)
+
+
 async def generate_summary():
     async with AsyncSessionLocal() as session:
         groups = await _query_summary(session)
@@ -213,23 +291,41 @@ async def generate_detail(code: str):
     await _screenshot(html, OUTPUT_DIR / f'detail_{code}_{date.today():%Y%m%d}.png')
 
 
+async def generate_summary_v2():
+    async with AsyncSessionLocal() as session:
+        indices = await _query_summary_v2(session)
+
+    today = date.today()
+    date_str = f'{today.year}年{today.month}月{today.day}日'
+
+    html = _render('daily_summary_v2.html', {
+        'date_str':    date_str,
+        'indices_json': json.dumps(indices, ensure_ascii=False),
+    })
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    await _screenshot_elements(html, [
+        ('cover-card',     OUTPUT_DIR / f'v2_cover_{today:%Y%m%d}.png'),
+        ('valuation-card', OUTPUT_DIR / f'v2_valuation_{today:%Y%m%d}.png'),
+    ])
+
+
 async def main():
     parser = argparse.ArgumentParser(description='生成小红书图片')
     parser.add_argument('--type', choices=['summary', 'detail'])
     parser.add_argument('--code', default='000300', help='指数代码，--type detail 时使用')
     parser.add_argument('--all',  action='store_true', help='生成全部图片')
+    parser.add_argument('--v2',   action='store_true', help='生成 v2 版本图片（封面图 + 估值一览图）')
     args = parser.parse_args()
 
-    if args.all:
+    if args.v2:
+        print('生成 v2 估值一览图...')
+        await generate_summary_v2()
+    elif args.all:
         print('生成每日汇总...')
         await generate_summary()
-        async with AsyncSessionLocal() as session:
-            active_indices = (await session.execute(
-                select(Index).where(Index.is_active == True)  # noqa: E712
-            )).scalars().all()
-        for idx in active_indices:
-            print(f'生成详情 {idx.code} {idx.name}...')
-            await generate_detail(idx.code)
+        for code in DETAIL_CODES:
+            print(f'生成详情 {code}...')
+            await generate_detail(code)
     elif args.type == 'summary':
         await generate_summary()
     elif args.type == 'detail':
